@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Music, LogIn, LogOut, User, MoreVertical, Music2, Disc, Mic } from 'lucide-react';
+import { Music, LogIn, LogOut, User, MoreVertical, Music2, Disc, Mic, Sparkles, PlayCircle, ShieldCheck, ListMusic, Compass, ArrowRight } from 'lucide-react';
 import MusicPlayer from './components/MusicPlayer';
 import PlaylistManager from './components/PlaylistManager';
 import SearchBar from './components/SearchBar';
@@ -23,11 +23,14 @@ function App() {
       const savedUser = localStorage.getItem('user');
       if (savedUser) return JSON.parse(savedUser);
       const token = localStorage.getItem('token');
-      if (token) return { username: 'Kevin' };
+      if (token) {
+        // If there is a token but no user object, try to reconstruct or keep minimal session
+        return { username: 'User' };
+      }
     } catch {
       // fallback
     }
-    return { username: 'Kevin' };
+    return null;
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
@@ -149,86 +152,104 @@ function App() {
             </div>
 
             <div className="flex items-center space-x-3">
-              <div className="w-72 sm:w-80 md:w-96">
-                <SearchBar
-                  onAddToPlaylist={handleAddToPlaylist}
-                  onPlayNow={handlePlayNow}
-                  onAddBatchToPlaylist={handleAddBatchToPlaylist}
-                  onPlayAlbum={handlePlayAlbum}
-                  searchMode={searchMode}
-                  onSearchModeChange={setSearchMode}
-                  hideModeButtons={true}
-                />
-              </div>
-
-              {/* 3 Dots Menu: Placed to the left of the user logged in area */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowModeMenu(prev => !prev)}
-                  className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
-                    showModeMenu ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                  title="Filter mode: Song, Album, Artist"
-                >
-                  <MoreVertical className="w-5 h-5" />
-                </button>
-
-                {showModeMenu && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowModeMenu(false)}
+              {user && (
+                <>
+                  <div className="w-72 sm:w-80 md:w-96">
+                    <SearchBar
+                      onAddToPlaylist={handleAddToPlaylist}
+                      onPlayNow={handlePlayNow}
+                      onAddBatchToPlaylist={handleAddBatchToPlaylist}
+                      onPlayAlbum={handlePlayAlbum}
+                      searchMode={searchMode}
+                      onSearchModeChange={setSearchMode}
+                      hideModeButtons={true}
                     />
-                    <div className="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-in fade-in zoom-in-95">
-                      <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                        Search By
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchMode('songs');
-                          setShowModeMenu(false);
-                        }}
-                        className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                          searchMode === 'songs' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Music2 className="w-4 h-4 mr-2" />
-                        <span>Song</span>
-                      </button>
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchMode('albums');
-                          setShowModeMenu(false);
-                        }}
-                        className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                          searchMode === 'albums' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Disc className="w-4 h-4 mr-2" />
-                        <span>Album</span>
-                      </button>
+                  {/* 3 Dots Menu: Placed to the left of the user logged in area */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowModeMenu(prev => !prev)}
+                      className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
+                        showModeMenu ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                      title="Filter mode: Song, Album, Artist"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchMode('artist');
-                          setShowModeMenu(false);
-                        }}
-                        className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                          searchMode === 'artist' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Mic className="w-4 h-4 mr-2" />
-                        <span>Artist</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+                    {showModeMenu && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowModeMenu(false)}
+                        />
+                        <div className="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-in fade-in zoom-in-95">
+                          <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                            Search By
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchMode('all');
+                              setShowModeMenu(false);
+                            }}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
+                              searchMode === 'all' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <Compass className="w-4 h-4 mr-2" />
+                            <span>All</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchMode('songs');
+                              setShowModeMenu(false);
+                            }}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
+                              searchMode === 'songs' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <Music2 className="w-4 h-4 mr-2" />
+                            <span>Song</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchMode('albums');
+                              setShowModeMenu(false);
+                            }}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
+                              searchMode === 'albums' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <Disc className="w-4 h-4 mr-2" />
+                            <span>Album</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchMode('artist');
+                              setShowModeMenu(false);
+                            }}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
+                              searchMode === 'artist' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <Mic className="w-4 h-4 mr-2" />
+                            <span>Artist</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
 
               {/* User Logged In Place */}
               {user ? (
@@ -248,9 +269,9 @@ function App() {
               ) : (
                 <button
                   onClick={() => setShowAuthModal(true)}
-                  className="flex items-center space-x-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap"
+                  className="flex items-center space-x-1.5 px-3 py-2 bg-white text-black border border-black rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm whitespace-nowrap"
                 >
-                  <LogIn className="w-4 h-4" />
+                  <LogIn className="w-4 h-4 text-black" />
                   <span>Login</span>
                 </button>
               )}
@@ -260,85 +281,143 @@ function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1">
-            <PlaylistManager
-              key={`pm-${playlistRefreshTrigger}`}
-              onSelectPlaylist={handleSelectPlaylist}
-              onSelectSong={handleSelectSong}
-              onMergePlaylist={(sourcePlaylist, items) => {
-                handleAddBatchToPlaylist(`${sourcePlaylist.name} (Copy)`, items);
-              }}
-              currentPlaylistId={currentPlaylist?.id}
-              user={user}
-            />
-          </div>
-
-          <div className="lg:col-span-2">
-            <div className="space-y-6">
-              <MusicPlayer
-                currentSong={currentSong}
-                isPlaying={isPlaying}
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onNext={handleNext}
-                onPrevious={handlePrevious}
-                onSongEnd={handleSongEnd}
+        {user ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-1">
+              <PlaylistManager
+                key={`pm-${playlistRefreshTrigger}`}
+                onSelectPlaylist={handleSelectPlaylist}
+                onSelectSong={handleSelectSong}
+                onMergePlaylist={(sourcePlaylist, items) => {
+                  handleAddBatchToPlaylist(`${sourcePlaylist.name} (Copy)`, items);
+                }}
+                currentPlaylistId={currentPlaylist?.id}
+                user={user}
               />
+            </div>
 
-              {currentPlaylist && currentPlaylist.items && currentPlaylist.items.length > 0 && (
-                <div className="bg-white rounded-lg shadow-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800 truncate mr-3" title={currentPlaylist.name}>
-                      Now Playing: {currentPlaylist.name}
-                    </h3>
-                    <button
-                      onClick={() => handleAddBatchToPlaylist(currentPlaylist.name, currentPlaylist.items)}
-                      className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
-                      title="Save or merge all these songs into another playlist"
-                    >
-                      <span>Save as Playlist</span>
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {currentPlaylist.items.map((song, index) => (
-                      <div
-                        key={song.id || `${song.videoId}-${index}`}
-                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)
-                          ? 'bg-blue-50 border border-blue-200'
-                          : 'hover:bg-gray-50'
-                          }`}
-                        onClick={() => handleSelectSong(song)}
+            <div className="lg:col-span-2">
+              <div className="space-y-6">
+                <MusicPlayer
+                  currentSong={currentSong}
+                  isPlaying={isPlaying}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onNext={handleNext}
+                  onPrevious={handlePrevious}
+                  onSongEnd={handleSongEnd}
+                />
+
+                {currentPlaylist && currentPlaylist.items && currentPlaylist.items.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800 truncate mr-3" title={currentPlaylist.name}>
+                        Now Playing: {currentPlaylist.name}
+                      </h3>
+                      <button
+                        onClick={() => handleAddBatchToPlaylist(currentPlaylist.name, currentPlaylist.items)}
+                        className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
+                        title="Save or merge all these songs into another playlist"
                       >
-                        <div className="flex items-center space-x-3 flex-1 min-w-0 pr-3">
-                          <div className="w-8 text-center flex-shrink-0">
-                            {(currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)) && isPlaying ? (
-                              <div className="flex items-center justify-center space-x-1">
-                                <div className="w-1 h-3 bg-blue-600 animate-pulse"></div>
-                                <div className="w-1 h-3 bg-blue-600 animate-pulse delay-75"></div>
-                                <div className="w-1 h-3 bg-blue-600 animate-pulse delay-150"></div>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-gray-500">{index + 1}</span>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className="font-medium text-gray-800 truncate block w-full max-w-full"
-                              title={song.title}
-                            >
-                              {song.title}
-                            </p>
+                        <span>Save as Playlist</span>
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {currentPlaylist.items.map((song, index) => (
+                        <div
+                          key={song.id || `${song.videoId}-${index}`}
+                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)
+                            ? 'bg-blue-50 border border-blue-200'
+                            : 'hover:bg-gray-50'
+                            }`}
+                          onClick={() => handleSelectSong(song)}
+                        >
+                          <div className="flex items-center space-x-3 flex-1 min-w-0 pr-3">
+                            <div className="w-8 text-center flex-shrink-0">
+                              {(currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)) && isPlaying ? (
+                                <div className="flex items-center justify-center space-x-1">
+                                  <div className="w-1 h-3 bg-blue-600 animate-pulse"></div>
+                                  <div className="w-1 h-3 bg-blue-600 animate-pulse delay-75"></div>
+                                  <div className="w-1 h-3 bg-blue-600 animate-pulse delay-150"></div>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-500">{index + 1}</span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className="font-medium text-gray-800 truncate block w-full max-w-full"
+                                title={song.title}
+                              >
+                                {song.title}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          /* Logged-out Home Page (No player) */
+          <div className="py-12 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+            {/* Hero Section */}
+            <div className="text-center space-y-6">
+              <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold tracking-wide border border-blue-100">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                <span>Unlimited Music Streaming & Cloud Playlists</span>
+              </div>
+
+              <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight leading-tight">
+                Your music, your albums, <br className="hidden sm:inline" />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+                  curated in one place.
+                </span>
+              </h1>
+
+              <p className="max-w-2xl mx-auto text-base sm:text-lg text-gray-600 leading-relaxed">
+                Search across millions of songs, full discographies, and albums. Build custom playlists, sync your collection, and enjoy uninterrupted listening.
+              </p>
+
+            </div>
+
+            {/* Feature Cards Grid */}
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+                  <Music2 className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Instant Search</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Search by track, complete album, or artist discography in seconds with smart auto-recommendations.
+                </p>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4">
+                  <ListMusic className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Custom Playlists</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Organize your favorites, create thematic mixtapes, and batch-save entire albums into your library.
+                </p>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-4">
+                  <Disc className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Album Playlists</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Listen to full albums in their original sequence with smooth track switching and discrete timeline scrubbing.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       <AddToPlaylistModal

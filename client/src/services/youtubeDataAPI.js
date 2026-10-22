@@ -1,6 +1,17 @@
 import axios from 'axios';
 import { config, searchApi } from './api';
 
+// ==========================================
+// CONFIGURAÇÃO DE APIS DE BUSCA (BOOLEANAS)
+// ==========================================
+export const API_CONFIG = {
+  // 1. Google YouTube Data API v3 Oficial (limitada por cota diária de 10.000 unidades)
+  USE_OFFICIAL_YOUTUBE_API: false,
+
+  // 2. Rocko Backend Proxy Scraper API (ilimitada, sem chave, roda via server/index.js)
+  USE_BACKEND_PROXY_API: true,
+};
+
 class YouTubeDataAPI {
   constructor() {
     this.apiKey = typeof window !== 'undefined' ? localStorage.getItem('youtubeApiKey') || 'AIzaSyC6GUBpE0xqE_fZRHl3r4G5C8h0dGqwM8g' : null;
@@ -27,8 +38,9 @@ class YouTubeDataAPI {
   }
 
   async searchVideos(query, maxResults = 25) {
-    try {
-      if (this.apiKey) {
+    // 1. API Oficial da Google (ativada apenas se USE_OFFICIAL_YOUTUBE_API = true)
+    if (API_CONFIG.USE_OFFICIAL_YOUTUBE_API && this.apiKey) {
+      try {
         const response = await axios.get(`${this.baseURL}/search`, {
           params: {
             part: 'snippet',
@@ -49,19 +61,21 @@ class YouTubeDataAPI {
           channelTitle: item.snippet.channelTitle,
           description: item.snippet.description
         }));
+      } catch (error) {
+        console.warn('YouTube Data API oficial falhou:', error.response?.status || error.message);
       }
-    } catch (error) {
-      console.warn('YouTube Data API failed (falling back to proxy search):', error.response?.status || error.message);
     }
 
-    // Direct proxy search via backend
-    try {
-      const proxyRes = await searchApi.proxySearch(query, 'songs');
-      if (proxyRes.data && proxyRes.data.length > 0) {
-        return proxyRes.data;
+    // 2. API Backend Proxy Scraper (ativa se USE_BACKEND_PROXY_API = true)
+    if (API_CONFIG.USE_BACKEND_PROXY_API) {
+      try {
+        const proxyRes = await searchApi.proxySearch(query, 'songs');
+        if (proxyRes.data && proxyRes.data.length > 0) {
+          return proxyRes.data;
+        }
+      } catch (proxyErr) {
+        console.warn('Backend proxy search falhou temporariamente:', proxyErr.message);
       }
-    } catch (proxyErr) {
-      console.warn('Backend proxy search not reachable yet, trying public search API:', proxyErr.message);
     }
 
     // Direct public music scraper fallback (no quota, works without server restart)
@@ -106,8 +120,8 @@ class YouTubeDataAPI {
 
   // Search albums / full music playlists
   async searchAlbums(query, maxResults = 15) {
-    try {
-      if (this.apiKey) {
+    if (API_CONFIG.USE_OFFICIAL_YOUTUBE_API && this.apiKey) {
+      try {
         const response = await axios.get(`${this.baseURL}/search`, {
           params: {
             part: 'snippet',
@@ -128,19 +142,21 @@ class YouTubeDataAPI {
             description: item.snippet.description
           }));
         }
+      } catch (error) {
+        console.warn('YouTube searchAlbums API oficial falhou:', error.response?.status || error.message);
       }
-    } catch (error) {
-      console.warn('YouTube searchAlbums API quota failed, using proxy:', error.response?.status || error.message);
     }
 
     // Proxy search for albums
-    try {
-      const proxyRes = await searchApi.proxySearch(query, 'albums');
-      if (proxyRes.data && proxyRes.data.length > 0) {
-        return proxyRes.data;
+    if (API_CONFIG.USE_BACKEND_PROXY_API) {
+      try {
+        const proxyRes = await searchApi.proxySearch(query, 'albums');
+        if (proxyRes.data && proxyRes.data.length > 0) {
+          return proxyRes.data;
+        }
+      } catch (proxyErr) {
+        console.error('Proxy albums search failed:', proxyErr);
       }
-    } catch (proxyErr) {
-      console.error('Proxy albums search failed:', proxyErr);
     }
 
     return this.fallbackAlbums(query);
@@ -148,8 +164,8 @@ class YouTubeDataAPI {
 
   // Get all tracks from a YouTube Playlist / Album
   async getPlaylistTracks(playlistId, maxResults = 50) {
-    try {
-      if (this.apiKey) {
+    if (API_CONFIG.USE_OFFICIAL_YOUTUBE_API && this.apiKey) {
+      try {
         const response = await axios.get(`${this.baseURL}/playlistItems`, {
           params: {
             part: 'snippet',
@@ -170,21 +186,23 @@ class YouTubeDataAPI {
               channelTitle: item.snippet.channelTitle
             }));
         }
+      } catch (error) {
+        console.warn('YouTube getPlaylistTracks API oficial falhou:', error.response?.status || error.message);
       }
-    } catch (error) {
-      console.warn('YouTube getPlaylistTracks API quota failed, using proxy:', error.response?.status || error.message);
     }
 
     // Proxy playlist tracks extractor
-    try {
-      if (playlistId) {
-        const proxyRes = await searchApi.getPlaylistTracks(playlistId);
-        if (proxyRes.data && proxyRes.data.length > 0) {
-          return proxyRes.data;
+    if (API_CONFIG.USE_BACKEND_PROXY_API) {
+      try {
+        if (playlistId) {
+          const proxyRes = await searchApi.getPlaylistTracks(playlistId);
+          if (proxyRes.data && proxyRes.data.length > 0) {
+            return proxyRes.data;
+          }
         }
+      } catch (proxyErr) {
+        console.warn('Proxy getPlaylistTracks failed:', proxyErr.message);
       }
-    } catch (proxyErr) {
-      console.warn('Proxy getPlaylistTracks failed:', proxyErr.message);
     }
 
     // Direct public piped instance fallback for playlist tracks
@@ -206,6 +224,21 @@ class YouTubeDataAPI {
     }
 
     return [];
+  }
+
+  // Search all categories combined (Songs, Albums, and Artist tracks)
+  async searchAll(query, maxResults = 50) {
+    if (API_CONFIG.USE_BACKEND_PROXY_API) {
+      try {
+        const proxyRes = await searchApi.proxySearch(query, 'all');
+        if (proxyRes.data && proxyRes.data.length > 0) {
+          return proxyRes.data;
+        }
+      } catch (err) {
+        console.warn('Proxy searchAll failed:', err.message);
+      }
+    }
+    return this.searchVideos(query, maxResults);
   }
 
   // Search discography / top songs by artist

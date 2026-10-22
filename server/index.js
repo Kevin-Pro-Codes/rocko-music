@@ -55,10 +55,10 @@ app.post('/api/login', async (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
-    
+
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(400).json({ error: 'Invalid credentials' });
-    
+
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
     res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
   } catch (err) {
@@ -109,7 +109,7 @@ app.get('/api/playlists/:id/items', authenticate, (req, res) => {
   try {
     const playlist = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
-    
+
     const items = db.prepare('SELECT * FROM playlist_items WHERE playlist_id = ? ORDER BY position ASC').all(req.params.id);
     res.json(items);
   } catch (err) {
@@ -162,10 +162,10 @@ app.post('/api/playlists/:id/items', authenticate, (req, res) => {
   try {
     const playlist = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
-    
+
     const posRow = db.prepare('SELECT COUNT(*) as count FROM playlist_items WHERE playlist_id = ?').get(req.params.id);
     const position = posRow.count;
-    
+
     const insert = db.prepare(`
       INSERT INTO playlist_items (playlist_id, video_id, title, thumbnail, position)
       VALUES (?, ?, ?, ?, ?)
@@ -184,7 +184,7 @@ app.delete('/api/playlists/:id/items/:itemId', authenticate, (req, res) => {
   try {
     const playlist = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
-    
+
     db.prepare('DELETE FROM playlist_items WHERE id = ? AND playlist_id = ?').run(req.params.itemId, req.params.id);
     res.json({ success: true });
   } catch (err) {
@@ -227,11 +227,13 @@ app.get('/api/search/proxy', async (req, res) => {
   if (!q) return res.status(400).json({ error: 'Query q is required' });
 
   try {
-    const searchQuery = type === 'albums' 
-      ? `${q} full album playlist` 
-      : type === 'artist' 
-      ? `${q} official audio music` 
-      : `${q} audio`;
+    const searchQuery = type === 'albums'
+      ? `${q} full album playlist`
+      : type === 'artist'
+        ? `${q} official audio music`
+        : type === 'all'
+          ? `${q} music`
+          : `${q} audio`;
 
     const encoded = encodeURIComponent(searchQuery);
     const searchUrl = `https://www.youtube.com/results?search_query=${encoded}&sp=EgIQAQ%253D%253D`; // filter for videos or playlists
@@ -251,46 +253,149 @@ app.get('/api/search/proxy', async (req, res) => {
     }
 
     const data = JSON.parse(jsonMatch[1]);
-    const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
+    const sections = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
 
     const results = [];
-    for (const item of contents) {
-      if (item.videoRenderer) {
-        const v = item.videoRenderer;
-        const videoId = v.videoId;
-        const title = v.title?.runs?.[0]?.text || '';
-        const artist = v.ownerText?.runs?.[0]?.text || v.channelTitle || 'Artist';
-        const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    for (const section of sections) {
+      const contents = section.itemSectionRenderer?.contents || [];
+      for (const item of contents) {
+        if (item.videoRenderer) {
+          const v = item.videoRenderer;
+          const videoId = v.videoId;
+          const title = v.title?.runs?.[0]?.text || '';
+          const artist = v.ownerText?.runs?.[0]?.text || v.channelTitle || 'Artist';
+          const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
 
-        if (videoId && title) {
-          results.push({
-            videoId,
-            title,
-            artist,
-            thumbnail,
-            channelTitle: artist
-          });
+          if (videoId && title && !results.some(r => r.videoId === videoId)) {
+            results.push({
+              videoId,
+              title,
+              artist,
+              thumbnail,
+              channelTitle: artist
+            });
+          }
+        } else if (item.playlistRenderer && (type === 'albums' || type === 'all')) {
+          const p = item.playlistRenderer;
+          const playlistId = p.playlistId;
+          const title = p.title?.simpleText || p.title?.runs?.[0]?.text || '';
+          const artist = p.shortBylineText?.runs?.[0]?.text || 'Album';
+          const thumbnail = p.thumbnails?.[0]?.thumbnails?.[0]?.url || '';
+
+          if (playlistId && title && !results.some(r => r.id === playlistId)) {
+            results.push({
+              id: playlistId,
+              playlistId,
+              title,
+              artist,
+              thumbnail,
+              description: 'Full Album Playlist'
+            });
+          }
+        } else if (item.shelfRenderer) {
+          // If YouTube grouped tracks under a shelf (e.g. popular songs or album tracks)
+          const shelfItems = item.shelfRenderer.content?.verticalListRenderer?.items || [];
+          for (const shelfItem of shelfItems) {
+            if (shelfItem.videoRenderer) {
+              const sv = shelfItem.videoRenderer;
+              const sVideoId = sv.videoId;
+              const sTitle = sv.title?.runs?.[0]?.text || '';
+              const sArtist = sv.ownerText?.runs?.[0]?.text || sv.channelTitle || 'Artist';
+              const sThumbnail = sv.thumbnail?.thumbnails?.[sv.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${sVideoId}/mqdefault.jpg`;
+              if (sVideoId && sTitle && !results.some(r => r.videoId === sVideoId)) {
+                results.push({
+                  videoId: sVideoId,
+                  title: sTitle,
+                  artist: sArtist,
+                  thumbnail: sThumbnail,
+                  channelTitle: sArtist
+                });
+              }
+            }
+          }
         }
-      } else if (item.playlistRenderer && type === 'albums') {
-        const p = item.playlistRenderer;
-        const playlistId = p.playlistId;
-        const title = p.title?.simpleText || p.title?.runs?.[0]?.text || '';
-        const artist = p.shortBylineText?.runs?.[0]?.text || 'Album';
-        const thumbnail = p.thumbnails?.[0]?.thumbnails?.[0]?.url || '';
 
-        if (playlistId && title) {
-          results.push({
-            id: playlistId,
-            playlistId,
-            title,
-            artist,
-            thumbnail,
-            description: 'Full Album Playlist'
-          });
+        if (results.length >= 80) break;
+      }
+      if (results.length >= 80) break;
+    }
+
+    // Check for YouTube continuation tokens and fetch up to 3 additional pages (yielding 60~80+ songs)
+    let continuationToken = null;
+    for (const section of sections) {
+      if (section.continuationItemRenderer) {
+        continuationToken = section.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token;
+        if (continuationToken) break;
+      }
+      const items = section.itemSectionRenderer?.contents || [];
+      for (const it of items) {
+        if (it.continuationItemRenderer) {
+          continuationToken = it.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token;
+          if (continuationToken) break;
         }
       }
+      if (continuationToken) break;
+    }
 
-      if (results.length >= 25) break;
+    let pageAttempts = 0;
+    while (continuationToken && results.length < 80 && pageAttempts < 3) {
+      pageAttempts++;
+      try {
+        const contRes = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                hl: 'en',
+                gl: 'US',
+                clientName: 'WEB',
+                clientVersion: '2.20231201.00.00'
+              }
+            },
+            continuation: continuationToken
+          })
+        });
+
+        const contData = await contRes.json();
+        const actions = contData.onResponseReceivedCommands?.[0]?.appendContinuationItemsAction?.continuationItems || [];
+        
+        let nextContinuationToken = null;
+        for (const act of actions) {
+          if (act.itemSectionRenderer) {
+            const cItems = act.itemSectionRenderer.contents || [];
+            for (const item of cItems) {
+              if (item.videoRenderer) {
+                const v = item.videoRenderer;
+                const videoId = v.videoId;
+                const title = v.title?.runs?.[0]?.text || '';
+                const artist = v.ownerText?.runs?.[0]?.text || v.channelTitle || 'Artist';
+                const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+
+                if (videoId && title && !results.some(r => r.videoId === videoId)) {
+                  results.push({
+                    videoId,
+                    title,
+                    artist,
+                    thumbnail,
+                    channelTitle: artist
+                  });
+                }
+              }
+            }
+          }
+          if (act.continuationItemRenderer) {
+            nextContinuationToken = act.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token;
+          }
+        }
+        continuationToken = nextContinuationToken;
+      } catch (contErr) {
+        console.warn('Continuation fetch warning:', contErr.message);
+        break;
+      }
     }
 
     res.json(results);

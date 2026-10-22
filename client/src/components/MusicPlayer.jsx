@@ -105,6 +105,13 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       youtubeService.playVideo(videoId);
       setCurrentTime(0);
       setDuration(currentSong.duration || 0);
+      onPlay?.();
+      // Ensure player state is active
+      setTimeout(() => {
+        if (youtubeService.player && typeof youtubeService.player.playVideo === 'function') {
+          youtubeService.player.playVideo();
+        }
+      }, 100);
     } else if (isPlaying) {
       youtubeService.playVideo();
     }
