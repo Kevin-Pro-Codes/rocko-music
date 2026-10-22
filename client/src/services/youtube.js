@@ -81,7 +81,8 @@ class YouTubeService {
             iv_load_policy: 3,
             disablekb: 1,
             enablejsapi: 1,
-            playsinline: 1
+            playsinline: 1,
+            origin: typeof window !== 'undefined' ? window.location.origin : undefined
           },
           events: {
             onReady: (event) => {

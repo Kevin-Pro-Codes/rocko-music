@@ -8,12 +8,17 @@ const SearchBar = ({ onAddToPlaylist, onPlayNow }) => {
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(() => {
+    return Boolean(
+      (typeof window !== 'undefined' ? localStorage.getItem('youtubeApiKey') : null) ||
+      youtubeDataAPI.apiKey ||
+      'AIzaSyC6GUBpE0xqE_fZRHl3r4G5C8h0dGqwM8g'
+    );
+  });
 
   useEffect(() => {
-    // Check if API key is available
-    const apiKey = localStorage.getItem('youtubeApiKey') || youtubeDataAPI.apiKey;
-    setHasApiKey(!!apiKey);
+    const apiKey = (typeof window !== 'undefined' ? localStorage.getItem('youtubeApiKey') : null) || youtubeDataAPI.apiKey || 'AIzaSyC6GUBpE0xqE_fZRHl3r4G5C8h0dGqwM8g';
+    setHasApiKey(Boolean(apiKey));
   }, []);
 
   const handleSearch = async (searchQuery) => {
@@ -53,16 +58,6 @@ const SearchBar = ({ onAddToPlaylist, onPlayNow }) => {
 
   return (
     <div className="relative">
-      {/* API Key Warning */}
-      {!hasApiKey && (
-        <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center">
-          <AlertCircle className="w-4 h-4 text-yellow-600 mr-2 flex-shrink-0" />
-          <p className="text-xs text-yellow-800">
-            Using demo mode. <a href="#" onClick={() => window.location.reload()} className="underline">Set up API key</a> for real YouTube search.
-          </p>
-        </div>
-      )}
-
       {/* Search Form */}
       <form onSubmit={handleSubmit} className="relative">
         <div className="relative">

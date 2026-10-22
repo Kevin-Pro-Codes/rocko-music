@@ -15,14 +15,19 @@ function App() {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState(null);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) return JSON.parse(savedUser);
+      const token = localStorage.getItem('token');
+      if (token) return { username: 'Kevin' };
+    } catch {
+      // fallback
+    }
+    return { username: 'Kevin' };
+  });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
-
-  useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
-  }, []);
 
   const handlePlay = () => setIsPlaying(true);
   const handlePause = () => setIsPlaying(false);
@@ -98,18 +103,16 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/70">
+    <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center space-x-2 shrink-0">
-              <Music className="w-5 h-5 text-blue-600 shrink-0" />
-              <h1 className="hidden sm:inline text-lg font-bold text-gray-900 tracking-tight whitespace-nowrap">
-                Rocko Music Player
-              </h1>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Music className="w-8 h-8 text-blue-600" />
+              <h1 className="text-2xl font-bold text-gray-900">Rocko Music Player</h1>
             </div>
-            <div className="flex items-center space-x-3 flex-1 justify-end max-w-xl">
-              <div className="w-full max-w-xs sm:max-w-sm">
+            <div className="flex items-center space-x-4">
+              <div className="w-96">
                 <SearchBar
                   onAddToPlaylist={handleAddToPlaylist}
                   onPlayNow={handlePlayNow}
@@ -175,11 +178,10 @@ function App() {
                     {currentPlaylist.items.map((song, index) => (
                       <div
                         key={song.id}
-                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                          currentSong?.id === song.id
+                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${currentSong?.id === song.id
                             ? 'bg-blue-50 border border-blue-200'
                             : 'hover:bg-gray-50'
-                        }`}
+                          }`}
                         onClick={() => handleSelectSong(song)}
                       >
                         <div className="flex items-center space-x-3">

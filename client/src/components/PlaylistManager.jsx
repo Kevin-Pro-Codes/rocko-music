@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Play, Trash2, Edit2, Save, X, Music, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { playlists } from '../services/api';
-import youtubeService from '../services/youtube';
 
 const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, user }) => {
   const [playlistsList, setPlaylistsList] = useState([]);
@@ -89,8 +88,8 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, us
         <h2 className="text-xl font-bold text-gray-800">Playlists</h2>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
-          className="p-1.5 text-black hover:text-gray-700 bg-transparent transition-colors"
-          title="Create playlist"
+          className="p-2 bg-transparent text-black rounded-lg hover:bg-gray-100 transition-colors"
+          title="Create Playlist"
         >
           <Plus className="w-5 h-5 text-black" />
         </button>
@@ -139,11 +138,10 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, us
             return (
               <div
                 key={playlist.id}
-                    className={`border rounded-lg p-4 transition-all cursor-pointer ${
-                      currentPlaylistId === playlist.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                className={`border rounded-lg p-4 transition-all cursor-pointer ${currentPlaylistId === playlist.id
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                  }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -186,11 +184,6 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, us
                           className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
-                            const vId = song.videoId || song.video_id;
-                            if (vId) {
-                              youtubeService.playVideo(vId);
-                            }
-                            onSelectPlaylist?.(playlist, items);
                             handleSelectSong(song);
                           }}
                         >

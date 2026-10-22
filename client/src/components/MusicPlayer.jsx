@@ -44,10 +44,6 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
           youtubeService.onStateChange((state) => {
             if (state === 'ended') {
               onSongEndRef.current?.();
-            } else if (state === 'playing') {
-              onPlay?.();
-            } else if (state === 'paused') {
-              onPause?.();
             }
           });
 
@@ -77,16 +73,20 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
   }, []);
 
   useEffect(() => {
-    if (!isPlayerReady || !currentSong) return;
+    if (!currentSong) return;
 
     const videoId = currentSong.videoId || currentSong.video_id;
     if (!videoId) return;
 
-    loadedVideoIdRef.current = videoId;
-    youtubeService.playVideo(videoId);
-    setCurrentTime(0);
-    setDuration(0);
-    youtubeService.setVolume(isMuted ? 0 : volume);
+    // Load new video if different
+    if (videoId !== loadedVideoIdRef.current) {
+      loadedVideoIdRef.current = videoId;
+      youtubeService.playVideo(videoId);
+      setCurrentTime(0);
+      setDuration(0);
+    } else if (isPlaying) {
+      youtubeService.playVideo();
+    }
   }, [currentSong, isPlayerReady]);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
     if (isPlaying) {
       youtubeService.playVideo();
     } else {
-      youtubeService.player.pauseVideo();
+      youtubeService.pauseVideo();
     }
   }, [isPlaying, isPlayerReady]);
 
@@ -104,9 +104,11 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
     if (isPlaying) {
       onPause?.();
+      youtubeService.pauseVideo();
     } else {
-      youtubeService.playVideo();
       onPlay?.();
+      const videoId = currentSong.videoId || currentSong.video_id;
+      youtubeService.playVideo(videoId);
     }
   };
 
@@ -151,18 +153,18 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
-      {/* YouTube Player iframe container - kept in DOM with minimal footprint so browser never freezes audio */}
+      {/* Off-screen YouTube iframe container kept rendered for audio playback */}
       <div
         id="youtube-player"
         style={{
           position: 'fixed',
-          bottom: '0px',
-          right: '0px',
-          width: '2px',
-          height: '2px',
-          opacity: 0.01,
+          bottom: '-500px',
+          right: '-500px',
+          width: '200px',
+          height: '200px',
           pointerEvents: 'none',
-          zIndex: -1
+          opacity: 0.001,
+          zIndex: -9999
         }}
       ></div>
 
