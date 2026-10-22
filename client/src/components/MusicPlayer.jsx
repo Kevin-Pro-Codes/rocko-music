@@ -82,13 +82,11 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
     const videoId = currentSong.videoId || currentSong.video_id;
     if (!videoId) return;
 
-    if (videoId !== loadedVideoIdRef.current) {
-      loadedVideoIdRef.current = videoId;
-      youtubeService.playVideo(videoId);
-      setCurrentTime(0);
-      setDuration(0);
-      youtubeService.setVolume(isMuted ? 0 : volume);
-    }
+    loadedVideoIdRef.current = videoId;
+    youtubeService.playVideo(videoId);
+    setCurrentTime(0);
+    setDuration(0);
+    youtubeService.setVolume(isMuted ? 0 : volume);
   }, [currentSong, isPlayerReady]);
 
   useEffect(() => {
@@ -153,16 +151,18 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
+      {/* YouTube Player iframe container - kept in DOM with minimal footprint so browser never freezes audio */}
       <div
         id="youtube-player"
         style={{
-          position: 'absolute',
-          top: '-9999px',
-          left: '-9999px',
-          width: '200px',
-          height: '200px',
+          position: 'fixed',
+          bottom: '0px',
+          right: '0px',
+          width: '2px',
+          height: '2px',
+          opacity: 0.01,
           pointerEvents: 'none',
-          opacity: 0
+          zIndex: -1
         }}
       ></div>
 
