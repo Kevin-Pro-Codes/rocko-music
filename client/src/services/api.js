@@ -1,0 +1,32 @@
+import axios from 'axios';
+
+const API_URL = 'http://localhost:3001/api';
+
+const api = axios.create({ baseURL: API_URL });
+
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const auth = {
+  register: (data) => api.post('/register', data),
+  login: (data) => api.post('/login', data),
+};
+
+export const playlists = {
+  getAll: () => api.get('/playlists'),
+  create: (name) => api.post('/playlists', { name }),
+  remove: (id) => api.delete(`/playlists/${id}`),
+  getItems: (id) => api.get(`/playlists/${id}/items`),
+  addItem: (id, item) => api.post(`/playlists/${id}/items`, item),
+  removeItem: (playlistId, itemId) => api.delete(`/playlists/${playlistId}/items/${itemId}`),
+};
+
+export const config = {
+  getYoutubeKey: () => api.get('/config/youtube-key'),
+  setYoutubeKey: (apiKey) => api.post('/config/youtube-key', { apiKey }),
+};
+
+export default api;
