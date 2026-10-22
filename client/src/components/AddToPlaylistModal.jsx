@@ -2,21 +2,28 @@ import { useState, useEffect } from 'react';
 import { Plus, Check } from 'lucide-react';
 import { playlists } from '../services/api';
 
-const AddToPlaylistModal = ({ song, isOpen, onClose, user }) => {
+const AddToPlaylistModal = ({ song, songs, defaultPlaylistName, isOpen, onClose, onPlaylistUpdated, user }) => {
   const [playlistsList, setPlaylistsList] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
 
+  const songItems = songs && songs.length > 0 ? songs : (song ? [song] : []);
+
   useEffect(() => {
     if (isOpen && user) {
       loadPlaylists();
       setSelectedPlaylist('');
-      setNewPlaylistName('');
-      setShowCreateForm(false);
+      if (defaultPlaylistName) {
+        setNewPlaylistName(defaultPlaylistName);
+        setShowCreateForm(true);
+      } else {
+        setNewPlaylistName('');
+        setShowCreateForm(false);
+      }
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, defaultPlaylistName]);
 
   const loadPlaylists = async () => {
     try {
@@ -29,6 +36,7 @@ const AddToPlaylistModal = ({ song, isOpen, onClose, user }) => {
 
   const handleAddToPlaylist = async () => {
     if (!selectedPlaylist && !showCreateForm) return;
+    if (songItems.length === 0) return;
 
     setIsAdding(true);
     try {
@@ -40,15 +48,36 @@ const AddToPlaylistModal = ({ song, isOpen, onClose, user }) => {
       }
 
       if (playlistId) {
-        await playlists.addItem(playlistId, {
-          video_id: song.videoId || song.id,
-          title: song.title,
-          thumbnail: song.thumbnail
-        });
+        if (songItems.length === 1) {
+          const item = songItems[0];
+          await playlists.addItem(playlistId, {
+            video_id: item.videoId || item.video_id || item.id,
+            title: item.title,
+            thumbnail: item.thumbnail
+          });
+        } else {
+          try {
+            await playlists.addBatchItems(playlistId, songItems);
+          } catch (batchErr) {
+            // Fallback for running instances where batch-items route is not yet active
+            if (batchErr.response && batchErr.response.status === 404) {
+              for (const item of songItems) {
+                await playlists.addItem(playlistId, {
+                  video_id: item.videoId || item.video_id || item.id,
+                  title: item.title,
+                  thumbnail: item.thumbnail
+                });
+              }
+            } else {
+              throw batchErr;
+            }
+          }
+        }
+        onPlaylistUpdated?.(playlistId);
         onClose();
       }
     } catch (err) {
-      console.error('Error adding song to playlist:', err);
+      console.error('Error adding song(s) to playlist:', err);
     } finally {
       setIsAdding(false);
     }
@@ -71,11 +100,16 @@ const AddToPlaylistModal = ({ song, isOpen, onClose, user }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
         <h3 className="text-lg font-bold text-gray-800 mb-4">
-          Add to Playlist
+          {songItems.length > 1 ? `Add ${songItems.length} Songs to Playlist` : 'Add to Playlist'}
         </h3>
 
         <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <p className="font-medium text-gray-800 truncate">{song.title}</p>
+          <p className="font-medium text-gray-800 truncate">
+            {defaultPlaylistName || (songItems.length > 1 ? `${songItems.length} songs selected` : songItems[0]?.title)}
+          </p>
+          {songItems.length > 1 && (
+            <p className="text-xs text-gray-500 mt-1">Entire album / artist collection will be saved together</p>
+          )}
         </div>
 
         <div className="space-y-3 mb-4">

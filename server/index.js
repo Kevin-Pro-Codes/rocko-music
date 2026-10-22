@@ -118,6 +118,43 @@ app.get('/api/playlists/:id/items', authenticate, (req, res) => {
   }
 });
 
+// Add batch items to playlist (album / artist discography)
+app.post('/api/playlists/:id/batch-items', authenticate, (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'items array is required' });
+  }
+
+  try {
+    const playlist = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+
+    const posRow = db.prepare('SELECT COUNT(*) as count FROM playlist_items WHERE playlist_id = ?').get(req.params.id);
+    let startPos = posRow.count;
+
+    const insert = db.prepare(`
+      INSERT INTO playlist_items (playlist_id, video_id, title, thumbnail, position)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const insertMany = db.transaction((songs) => {
+      for (const song of songs) {
+        const vid = song.videoId || song.video_id;
+        if (vid && song.title) {
+          insert.run(req.params.id, vid, song.title, song.thumbnail || null, startPos++);
+        }
+      }
+    });
+
+    insertMany(items);
+    const updatedItems = db.prepare('SELECT * FROM playlist_items WHERE playlist_id = ? ORDER BY position ASC').all(req.params.id);
+    res.json(updatedItems);
+  } catch (err) {
+    console.error('Batch add playlist items error:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
 // Add item to playlist
 app.post('/api/playlists/:id/items', authenticate, (req, res) => {
   const { video_id, title, thumbnail } = req.body;
@@ -181,6 +218,129 @@ app.post('/api/config/youtube-key', (req, res) => {
   } catch (err) {
     console.error('Set API key error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Proxy search for YouTube music, albums, and artist tracks without quota limits
+app.get('/api/search/proxy', async (req, res) => {
+  const { q, type } = req.query;
+  if (!q) return res.status(400).json({ error: 'Query q is required' });
+
+  try {
+    const searchQuery = type === 'albums' 
+      ? `${q} full album playlist` 
+      : type === 'artist' 
+      ? `${q} official audio music` 
+      : `${q} audio`;
+
+    const encoded = encodeURIComponent(searchQuery);
+    const searchUrl = `https://www.youtube.com/results?search_query=${encoded}&sp=EgIQAQ%253D%253D`; // filter for videos or playlists
+
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+
+    const html = await response.text();
+    const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/) || html.match(/window\["ytInitialData"\] = ({.*?});<\/script>/);
+
+    if (!jsonMatch) {
+      return res.json([]);
+    }
+
+    const data = JSON.parse(jsonMatch[1]);
+    const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
+
+    const results = [];
+    for (const item of contents) {
+      if (item.videoRenderer) {
+        const v = item.videoRenderer;
+        const videoId = v.videoId;
+        const title = v.title?.runs?.[0]?.text || '';
+        const artist = v.ownerText?.runs?.[0]?.text || v.channelTitle || 'Artist';
+        const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+
+        if (videoId && title) {
+          results.push({
+            videoId,
+            title,
+            artist,
+            thumbnail,
+            channelTitle: artist
+          });
+        }
+      } else if (item.playlistRenderer && type === 'albums') {
+        const p = item.playlistRenderer;
+        const playlistId = p.playlistId;
+        const title = p.title?.simpleText || p.title?.runs?.[0]?.text || '';
+        const artist = p.shortBylineText?.runs?.[0]?.text || 'Album';
+        const thumbnail = p.thumbnails?.[0]?.thumbnails?.[0]?.url || '';
+
+        if (playlistId && title) {
+          results.push({
+            id: playlistId,
+            playlistId,
+            title,
+            artist,
+            thumbnail,
+            description: 'Full Album Playlist'
+          });
+        }
+      }
+
+      if (results.length >= 25) break;
+    }
+
+    res.json(results);
+  } catch (err) {
+    console.error('Proxy search error:', err);
+    res.status(500).json({ error: 'Failed to proxy search: ' + err.message });
+  }
+});
+
+// Proxy to extract playlist items from YouTube playlist HTML without API key quota
+app.get('/api/search/playlist-tracks', async (req, res) => {
+  const { playlistId } = req.query;
+  if (!playlistId) return res.status(400).json({ error: 'playlistId is required' });
+
+  try {
+    const url = `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+
+    const html = await response.text();
+    const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/) || html.match(/window\["ytInitialData"\] = ({.*?});<\/script>/);
+
+    if (!jsonMatch) {
+      return res.json([]);
+    }
+
+    const data = JSON.parse(jsonMatch[1]);
+    const items = data.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents?.[0]?.playlistVideoListRenderer?.contents || [];
+
+    const tracks = [];
+    for (const item of items) {
+      const v = item.playlistVideoRenderer;
+      if (v && v.videoId && v.title?.runs?.[0]?.text) {
+        tracks.push({
+          videoId: v.videoId,
+          title: v.title.runs[0].text,
+          artist: v.shortBylineText?.runs?.[0]?.text || 'Artist',
+          thumbnail: v.thumbnail?.thumbnails?.[0]?.url || `https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`
+        });
+      }
+    }
+
+    res.json(tracks);
+  } catch (err) {
+    console.error('Proxy playlist tracks error:', err);
+    res.status(500).json({ error: 'Failed to fetch playlist tracks' });
   }
 });
 

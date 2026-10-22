@@ -15,6 +15,9 @@ function App() {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState(null);
+  const [selectedBatchSongs, setSelectedBatchSongs] = useState([]);
+  const [defaultPlaylistTitle, setDefaultPlaylistTitle] = useState('');
+  const [playlistRefreshTrigger, setPlaylistRefreshTrigger] = useState(0);
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('user');
@@ -54,7 +57,7 @@ function App() {
 
   const handleSelectSong = (song) => {
     if (currentPlaylist && currentPlaylist.items) {
-      const songIndex = currentPlaylist.items.findIndex(s => s.id === song.id);
+      const songIndex = currentPlaylist.items.findIndex(s => (s.videoId || s.video_id || s.id) === (song.videoId || song.video_id || song.id));
       if (songIndex !== -1) setCurrentSongIndex(songIndex);
     }
     setCurrentSong(song);
@@ -80,12 +83,39 @@ function App() {
     setCurrentSongIndex(0);
   };
 
+  // Play entire album directly in queue
+  const handlePlayAlbum = (albumTitle, tracks) => {
+    if (!tracks || tracks.length === 0) return;
+    const virtualPlaylist = {
+      id: 'album-' + Date.now(),
+      name: albumTitle,
+      items: tracks
+    };
+    setCurrentPlaylist(virtualPlaylist);
+    setCurrentSong(tracks[0]);
+    setCurrentSongIndex(0);
+    setIsPlaying(true);
+  };
+
   const handleAddToPlaylist = (song) => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
     setSelectedSongForPlaylist(song);
+    setSelectedBatchSongs([]);
+    setDefaultPlaylistTitle('');
+    setShowAddToPlaylistModal(true);
+  };
+
+  const handleAddBatchToPlaylist = (collectionName, songs) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    setSelectedSongForPlaylist(null);
+    setSelectedBatchSongs(songs);
+    setDefaultPlaylistTitle(collectionName);
     setShowAddToPlaylistModal(true);
   };
 
@@ -112,10 +142,12 @@ function App() {
               <h1 className="text-2xl font-bold text-gray-900">Rocko Music Player</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="w-96">
+              <div className="w-80 md:w-96">
                 <SearchBar
                   onAddToPlaylist={handleAddToPlaylist}
                   onPlayNow={handlePlayNow}
+                  onAddBatchToPlaylist={handleAddBatchToPlaylist}
+                  onPlayAlbum={handlePlayAlbum}
                 />
               </div>
               {user ? (
@@ -150,6 +182,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
             <PlaylistManager
+              key={`pm-${playlistRefreshTrigger}`}
               onSelectPlaylist={handleSelectPlaylist}
               onSelectSong={handleSelectSong}
               currentPlaylistId={currentPlaylist?.id}
@@ -177,8 +210,8 @@ function App() {
                   <div className="space-y-2">
                     {currentPlaylist.items.map((song, index) => (
                       <div
-                        key={song.id}
-                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${currentSong?.id === song.id
+                        key={song.id || `${song.videoId}-${index}`}
+                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)
                             ? 'bg-blue-50 border border-blue-200'
                             : 'hover:bg-gray-50'
                           }`}
@@ -186,7 +219,7 @@ function App() {
                       >
                         <div className="flex items-center space-x-3">
                           <div className="w-8 text-center">
-                            {currentSong?.id === song.id && isPlaying ? (
+                            {(currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)) && isPlaying ? (
                               <div className="flex items-center justify-center space-x-1">
                                 <div className="w-1 h-3 bg-blue-600 animate-pulse"></div>
                                 <div className="w-1 h-3 bg-blue-600 animate-pulse delay-75"></div>
@@ -214,10 +247,17 @@ function App() {
 
       <AddToPlaylistModal
         song={selectedSongForPlaylist}
+        songs={selectedBatchSongs}
+        defaultPlaylistName={defaultPlaylistTitle}
         isOpen={showAddToPlaylistModal}
         onClose={() => {
           setShowAddToPlaylistModal(false);
           setSelectedSongForPlaylist(null);
+          setSelectedBatchSongs([]);
+          setDefaultPlaylistTitle('');
+        }}
+        onPlaylistUpdated={() => {
+          setPlaylistRefreshTrigger(prev => prev + 1);
         }}
         user={user}
       />
