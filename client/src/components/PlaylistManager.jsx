@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Play, Trash2, Edit2, Save, X, Music, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Play, Trash2, Edit2, Save, X, Music, Clock, ChevronDown, ChevronUp, FolderPlus } from 'lucide-react';
 import { playlists } from '../services/api';
 
-const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, user }) => {
+const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, currentPlaylistId, user }) => {
   const [playlistsList, setPlaylistsList] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -163,12 +163,25 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, us
                     </div>
                   </div>
                   <div className="flex items-center space-x-1 ml-2">
+                    {items.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMergePlaylist?.(playlist, items);
+                        }}
+                        className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                        title="Add/Merge entire playlist into another playlist"
+                      >
+                        <FolderPlus className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeletePlaylist(playlist.id);
                       }}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                      title="Delete playlist"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -181,18 +194,21 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, us
                       {items.slice(0, expandedPlaylists.has(playlist.id) ? items.length : 3).map((song) => (
                         <div
                           key={song.id}
-                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
+                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer group"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSelectSong(song);
                           }}
                         >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <p
+                              className="text-sm font-medium text-gray-800 truncate"
+                              title={song.title}
+                            >
                               {song.title}
                             </p>
                           </div>
-                          <Play className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                          <Play className="w-4 h-4 text-blue-600 flex-shrink-0 opacity-80 group-hover:opacity-100" />
                         </div>
                       ))}
                       {items.length > 3 && (

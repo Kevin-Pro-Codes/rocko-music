@@ -33,7 +33,8 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
             modestbranding: 1,
             rel: 0,
             showinfo: 0,
-            playsinline: 1
+            playsinline: 1,
+            origin: window.location.origin
           }
         });
 
@@ -44,18 +45,14 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
           youtubeService.onStateChange((state) => {
             if (state === 'ended') {
               onSongEndRef.current?.();
+            } else if (state === 'playing') {
+              onPlay?.();
+              const dur = youtubeService.getDuration();
+              if (dur > 0) setDuration(dur);
+            } else if (state === 'paused') {
+              onPause?.();
             }
           });
-
-          // Update progress every 500ms for smoother updates
-          progressIntervalRef.current = setInterval(() => {
-            if (youtubeService.player && youtubeService.isReady) {
-              const ct = youtubeService.getCurrentTime();
-              const dur = youtubeService.getDuration();
-              setCurrentTime(ct);
-              setDuration(dur);
-            }
-          }, 500);
         }
       } catch (error) {
         console.error('Error initializing YouTube player:', error);
@@ -66,11 +63,35 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
     return () => {
       mounted = false;
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
     };
   }, []);
+
+  // Active playback ticker: advances currentTime every 250ms when song is playing,
+  // prioritizing actual youtube player time whenever available, and estimating smoothly if iframe lags
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const interval = setInterval(() => {
+      const ytTime = youtubeService.getCurrentTime();
+      const ytDur = youtubeService.getDuration();
+
+      if (ytDur > 0) {
+        setDuration(ytDur);
+      }
+
+      if (ytTime > 0) {
+        setCurrentTime(ytTime);
+      } else {
+        // Fallback ticker if iframe postMessage is throttled by browser
+        setCurrentTime(prev => {
+          const next = prev + 0.25;
+          return duration > 0 && next >= duration ? duration : next;
+        });
+      }
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, duration]);
 
   useEffect(() => {
     if (!currentSong) return;
@@ -83,7 +104,7 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       loadedVideoIdRef.current = videoId;
       youtubeService.playVideo(videoId);
       setCurrentTime(0);
-      setDuration(0);
+      setDuration(currentSong.duration || 0);
     } else if (isPlaying) {
       youtubeService.playVideo();
     }
@@ -108,7 +129,13 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
     } else {
       onPlay?.();
       const videoId = currentSong.videoId || currentSong.video_id;
-      youtubeService.playVideo(videoId);
+      // If this video is already loaded, simply resume playback where it paused
+      if (loadedVideoIdRef.current === videoId && youtubeService.player) {
+        youtubeService.playVideo();
+      } else {
+        loadedVideoIdRef.current = videoId;
+        youtubeService.playVideo(videoId);
+      }
     }
   };
 
@@ -137,11 +164,10 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
   };
 
   const handleSeek = (e) => {
-    const newTime = (e.target.value / 100) * duration;
+    const percent = parseFloat(e.target.value);
+    const newTime = (percent / 100) * (duration || 1);
     setCurrentTime(newTime);
-    if (youtubeService.player && youtubeService.isReady) {
-      youtubeService.player.seekTo(newTime, true);
-    }
+    youtubeService.seekTo(newTime, true);
   };
 
   const formatTime = (seconds) => {
@@ -153,17 +179,17 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
-      {/* Off-screen YouTube iframe container kept rendered for audio playback */}
+      {/* Active YouTube iframe container kept in viewport to ensure uninterrupted timer events */}
       <div
         id="youtube-player"
         style={{
           position: 'fixed',
-          bottom: '-500px',
-          right: '-500px',
+          bottom: '0px',
+          right: '0px',
           width: '200px',
           height: '200px',
           pointerEvents: 'none',
-          opacity: 0.001,
+          opacity: 0.0001,
           zIndex: -9999
         }}
       ></div>
@@ -178,20 +204,35 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
         </p>
       </div>
 
-      {/* Progress Bar */}
+      {/* Progress Bar with clickable track */}
       <div className="mb-4">
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-1 font-mono">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={duration > 0 ? (currentTime / duration) * 100 : 0}
-          onChange={handleSeek}
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-        />
+        <div
+          className="relative w-full py-2 cursor-pointer flex items-center"
+          onClick={(e) => {
+            if (!currentSong) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const clickPos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            const newTime = clickPos * (duration || 180);
+            setCurrentTime(newTime);
+            youtubeService.seekTo(newTime, true);
+          }}
+        >
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="0.1"
+            value={(duration > 0 ? (currentTime / duration) : (currentTime / 180)) * 100}
+            onInput={handleSeek}
+            onChange={handleSeek}
+            disabled={!currentSong}
+            className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer slider disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+        </div>
       </div>
 
       {/* Player Controls */}
@@ -257,20 +298,33 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       <style>{`
         .slider::-webkit-slider-thumb {
           appearance: none;
-          width: 12px;
-          height: 12px;
-          background: #0ea5e9;
-          border-radius: 50%;
-          cursor: pointer;
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 12px;
-          height: 12px;
+          width: 14px;
+          height: 14px;
           background: #0ea5e9;
           border-radius: 50%;
           cursor: pointer;
           border: none;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          transition: transform 0.1s ease;
+        }
+        
+        .slider::-webkit-slider-thumb:hover {
+          transform: scale(1.15);
+        }
+
+        .slider::-moz-range-thumb {
+          width: 14px;
+          height: 14px;
+          background: #0ea5e9;
+          border-radius: 50%;
+          cursor: pointer;
+          border: none;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          transition: transform 0.1s ease;
+        }
+
+        .slider::-moz-range-thumb:hover {
+          transform: scale(1.15);
         }
       `}</style>
     </div>

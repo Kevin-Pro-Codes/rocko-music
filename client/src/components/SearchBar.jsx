@@ -3,9 +3,18 @@ import { Search, Plus, Play, Disc, Mic, Music2, FolderPlus } from 'lucide-react'
 import youtubeService from '../services/youtube';
 import youtubeDataAPI from '../services/youtubeDataAPI';
 
-const SearchBar = ({ onAddToPlaylist, onPlayNow, onAddBatchToPlaylist, onPlayAlbum }) => {
+const SearchBar = ({ 
+  onAddToPlaylist, 
+  onPlayNow, 
+  onAddBatchToPlaylist, 
+  onPlayAlbum,
+  searchMode: externalSearchMode,
+  onSearchModeChange: externalOnSearchModeChange,
+  hideModeButtons = false
+}) => {
   const [query, setQuery] = useState('');
-  const [searchMode, setSearchMode] = useState('songs'); // 'songs' | 'albums' | 'artist'
+  const [internalSearchMode, setInternalSearchMode] = useState('songs'); // 'songs' | 'albums' | 'artist'
+  const searchMode = externalSearchMode || internalSearchMode;
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [loadingAlbumId, setLoadingAlbumId] = useState(null);
@@ -51,7 +60,11 @@ const SearchBar = ({ onAddToPlaylist, onPlayNow, onAddBatchToPlaylist, onPlayAlb
   };
 
   const handleModeChange = (newMode) => {
-    setSearchMode(newMode);
+    if (externalOnSearchModeChange) {
+      externalOnSearchModeChange(newMode);
+    } else {
+      setInternalSearchMode(newMode);
+    }
     if (query.trim()) {
       handleSearch(query, newMode);
     }
@@ -139,45 +152,47 @@ const SearchBar = ({ onAddToPlaylist, onPlayNow, onAddBatchToPlaylist, onPlayAlb
 
   return (
     <div className="relative">
-      {/* Search Mode Filter Buttons */}
-      <div className="flex items-center space-x-1.5 mb-1.5">
-        <button
-          type="button"
-          onClick={() => handleModeChange('songs')}
-          className={`flex items-center px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
-            searchMode === 'songs'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <Music2 className="w-3.5 h-3.5 mr-1" />
-          Songs
-        </button>
-        <button
-          type="button"
-          onClick={() => handleModeChange('albums')}
-          className={`flex items-center px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
-            searchMode === 'albums'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <Disc className="w-3.5 h-3.5 mr-1" />
-          Albums
-        </button>
-        <button
-          type="button"
-          onClick={() => handleModeChange('artist')}
-          className={`flex items-center px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
-            searchMode === 'artist'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <Mic className="w-3.5 h-3.5 mr-1" />
-          Artist
-        </button>
-      </div>
+      {/* Search Mode Filter Buttons (rendered unless moved to header menu) */}
+      {!hideModeButtons && (
+        <div className="flex items-center space-x-1.5 mb-1.5">
+          <button
+            type="button"
+            onClick={() => handleModeChange('songs')}
+            className={`flex items-center px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+              searchMode === 'songs'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Music2 className="w-3.5 h-3.5 mr-1" />
+            Songs
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeChange('albums')}
+            className={`flex items-center px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+              searchMode === 'albums'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Disc className="w-3.5 h-3.5 mr-1" />
+            Albums
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeChange('artist')}
+            className={`flex items-center px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+              searchMode === 'artist'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Mic className="w-3.5 h-3.5 mr-1" />
+            Artist
+          </button>
+        </div>
+      )}
 
       {/* Search Form */}
       <form onSubmit={handleSubmit} className="relative">

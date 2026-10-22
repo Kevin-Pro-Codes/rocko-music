@@ -210,17 +210,38 @@ class YouTubeService {
   }
 
   getCurrentTime() {
-    if (this.player && this.isReady) {
-      return this.player.getCurrentTime();
+    if (this.player && typeof this.player.getCurrentTime === 'function') {
+      try {
+        return this.player.getCurrentTime() || 0;
+      } catch {
+        return 0;
+      }
     }
     return 0;
   }
 
   getDuration() {
-    if (this.player && this.isReady) {
-      return this.player.getDuration();
+    if (this.player && typeof this.player.getDuration === 'function') {
+      try {
+        return this.player.getDuration() || 0;
+      } catch {
+        return 0;
+      }
     }
     return 0;
+  }
+
+  seekTo(seconds, allowSeekAhead = true) {
+    if (this.player && typeof this.player.seekTo === 'function') {
+      try {
+        this.player.seekTo(seconds, allowSeekAhead);
+        if (typeof this.player.playVideo === 'function') {
+          this.player.playVideo();
+        }
+      } catch (e) {
+        console.warn('Seek error:', e);
+      }
+    }
   }
 
   getPlayerState() {
