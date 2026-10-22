@@ -135,7 +135,18 @@ class YouTubeService {
 
   playVideo(videoId) {
     if (!this.player || !this.isReady) {
-      console.error('Player not ready');
+      console.warn('[YouTube] Player not ready yet, queuing video:', videoId);
+      if (videoId) {
+        this.onReady((player) => {
+          try {
+            player.unMute();
+            player.loadVideoById(videoId);
+            player.playVideo();
+          } catch (e) {
+            console.error('[YouTube] Queued play error:', e);
+          }
+        });
+      }
       return;
     }
     try {
@@ -143,18 +154,20 @@ class YouTubeService {
         this.player.unMute();
       }
       if (videoId) {
-        console.log('Loading and playing video:', videoId);
+        console.log('[YouTube] Loading and playing video ID:', videoId);
         if (typeof this.player.loadVideoById === 'function') {
-          this.player.loadVideoById({
-            videoId: videoId,
-            suggestedQuality: 'small'
-          });
+          this.player.loadVideoById(videoId);
+        }
+        if (typeof this.player.playVideo === 'function') {
+          this.player.playVideo();
         }
       } else {
-        this.player.playVideo();
+        if (typeof this.player.playVideo === 'function') {
+          this.player.playVideo();
+        }
       }
     } catch (err) {
-      console.error('Error playing video:', err);
+      console.error('[YouTube] Error in playVideo:', err);
     }
   }
 

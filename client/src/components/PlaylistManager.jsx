@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Play, Trash2, Edit2, Save, X, Music, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { playlists } from '../services/api';
+import youtubeService from '../services/youtube';
 
 const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, user }) => {
   const [playlistsList, setPlaylistsList] = useState([]);
@@ -185,6 +186,10 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, currentPlaylistId, us
                           className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
+                            const vId = song.videoId || song.video_id;
+                            if (vId) {
+                              youtubeService.playVideo(vId);
+                            }
                             onSelectPlaylist?.(playlist, items);
                             handleSelectSong(song);
                           }}
