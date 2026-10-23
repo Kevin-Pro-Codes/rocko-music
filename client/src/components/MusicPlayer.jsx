@@ -11,6 +11,7 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const loadedVideoIdRef = useRef(null);
   const onSongEndRef = useRef(onSongEnd);
+  const songEndTriggeredRef = useRef(false);
   const progressIntervalRef = useRef(null);
 
   useEffect(() => {
@@ -45,7 +46,10 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
           youtubeService.onStateChangeCallbacks = [];
           youtubeService.onStateChange((state) => {
             if (state === 'ended') {
-              onSongEndRef.current?.();
+              if (!songEndTriggeredRef.current) {
+                songEndTriggeredRef.current = true;
+                onSongEndRef.current?.();
+              }
             } else if (state === 'playing') {
               onPlay?.();
               const dur = youtubeService.getDuration();
@@ -67,6 +71,11 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
     };
   }, []);
 
+  // Reset song end flag when current song changes
+  useEffect(() => {
+    songEndTriggeredRef.current = false;
+  }, [currentSong]);
+
   // Continuous active playback ticker: advances currentTime every 250ms when song is playing,
   // prioritizing actual youtube player time and duration whenever available
   useEffect(() => {
@@ -82,11 +91,23 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
       if (ytTime > 0) {
         setCurrentTime(ytTime);
+        // Fallback: trigger next song if within 0.5s of the end or reached duration
+        if (ytDur > 0 && ytTime >= ytDur - 0.5 && !songEndTriggeredRef.current) {
+          songEndTriggeredRef.current = true;
+          onSongEndRef.current?.();
+        }
       } else {
         // Fallback ticker if iframe postMessage is throttled by browser
         setCurrentTime(prev => {
           const next = prev + 0.25;
-          return duration > 0 && next >= duration ? duration : next;
+          if (duration > 0 && next >= duration) {
+            if (!songEndTriggeredRef.current) {
+              songEndTriggeredRef.current = true;
+              onSongEndRef.current?.();
+            }
+            return duration;
+          }
+          return next;
         });
       }
     }, 250);
@@ -179,6 +200,86 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       youtubeService.pauseVideo();
     }
   }, [isPlaying, isPlayerReady]);
+
+  const silentAudioRef = useRef(null);
+
+  // Global Hardware Media Keys (Play/Pause, Next, Prev) via OS MediaSession API
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    // Create a tiny silent audio element to claim audio focus at the browser/OS tab level
+    if (!silentAudioRef.current) {
+      const audio = document.createElement('audio');
+      // Tiny 1-second silent WAV data URI
+      audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      audio.loop = true;
+      audio.volume = 0.001;
+      silentAudioRef.current = audio;
+    }
+
+    if (currentSong) {
+      try {
+        navigator.mediaSession.metadata = new window.MediaMetadata({
+          title: currentSong.title || 'Unknown Title',
+          artist: currentSong.artist || 'Rocko Music Player',
+          album: 'Rocko Music',
+          artwork: currentSong.thumbnail ? [{ src: currentSong.thumbnail, sizes: '512x512', type: 'image/jpeg' }] : []
+        });
+      } catch (e) {
+        // ignore media metadata error
+      }
+    }
+
+    if (isPlaying) {
+      navigator.mediaSession.playbackState = 'playing';
+      silentAudioRef.current?.play()?.catch(() => {});
+    } else {
+      navigator.mediaSession.playbackState = 'paused';
+      silentAudioRef.current?.pause();
+    }
+
+    try {
+      navigator.mediaSession.setActionHandler('play', () => {
+        onPlay?.();
+        youtubeService.playVideo();
+        silentAudioRef.current?.play()?.catch(() => {});
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        onPause?.();
+        youtubeService.pauseVideo();
+        silentAudioRef.current?.pause();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        onPrevious?.();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        onNext?.();
+      });
+      navigator.mediaSession.setActionHandler('stop', () => {
+        onPause?.();
+        youtubeService.pauseVideo();
+        silentAudioRef.current?.pause();
+      });
+    } catch (err) {
+      console.warn('MediaSession handler registration:', err);
+    }
+  }, [currentSong, isPlaying, onPlay, onPause, onNext, onPrevious]);
+
+  // Keep MediaSession position state in sync with duration and playback
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+    if (duration > 0 && currentTime >= 0 && currentTime <= duration) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: Math.max(duration, 1),
+          playbackRate: 1,
+          position: Math.min(currentTime, duration)
+        });
+      } catch {
+        // ignore out-of-range position errors
+      }
+    }
+  }, [currentTime, duration]);
 
   const handlePlayPause = () => {
     if (!currentSong) return;

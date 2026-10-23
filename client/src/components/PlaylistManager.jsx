@@ -113,8 +113,8 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAd
     onSelectPlaylist?.(playlist, itemsMap[playlist.id] || []);
   };
 
-  const handleSelectSong = (song) => {
-    onSelectSong?.(song);
+  const handleSelectSong = (song, playlist) => {
+    onSelectSong?.(song, playlist, itemsMap[playlist?.id] || []);
   };
 
   const formatDate = (dateString) => {
@@ -287,7 +287,7 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAd
                           className="flex items-center justify-between p-2 hover:bg-white rounded-md cursor-pointer group transition-colors border border-transparent hover:border-gray-200"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleSelectSong(song);
+                            handleSelectSong(song, playlist);
                           }}
                         >
                           <div className="flex-1 min-w-0 pr-2">
@@ -298,8 +298,14 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAd
                               {song.title}
                             </p>
                           </div>
-                          <div className="flex items-center space-x-1 flex-shrink-0">
-                            <Play className="w-4 h-4 text-blue-600 opacity-70 group-hover:opacity-100" />
+                          <div className="flex items-center space-x-3 flex-shrink-0">
+                            <button
+                              type="button"
+                              className="p-1 hover:bg-blue-50 text-blue-600 rounded transition-colors"
+                              title="Play song"
+                            >
+                              <Play className="w-4 h-4 opacity-80 group-hover:opacity-100" />
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => handleRemoveSongFromPlaylist(playlist.id, song.id, e)}

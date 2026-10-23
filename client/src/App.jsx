@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Music, LogIn, LogOut, User, MoreVertical, Music2, Disc, Mic, Sparkles, PlayCircle, ShieldCheck, ListMusic, Compass, ArrowRight, Trash2, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Music, LogIn, LogOut, User, MoreVertical, Music2, Disc, Mic, Sparkles, PlayCircle, ShieldCheck, ListMusic, Compass, ArrowRight, Trash2, Plus, Keyboard } from 'lucide-react';
 import MusicPlayer from './components/MusicPlayer';
 import PlaylistManager from './components/PlaylistManager';
 import SearchBar from './components/SearchBar';
 import AddToPlaylistModal from './components/AddToPlaylistModal';
 import AuthModal from './components/AuthModal';
 import ApiKeySetup from './components/ApiKeySetup';
+import HotkeysModal from './components/HotkeysModal';
+import youtubeService from './services/youtube';
 import './App.css';
 
 function App() {
@@ -34,58 +36,223 @@ function App() {
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
+  const [showHotkeysModal, setShowHotkeysModal] = useState(false);
+  const [hotkeysConfig, setHotkeysConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hotkeys_config');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return {
+      playPause: 'Space',
+      nextTrack: 'KeyN',
+      prevTrack: 'KeyP',
+      volumeUp: 'ArrowUp',
+      volumeDown: 'ArrowDown',
+      mute: 'KeyM'
+    };
+  });
+  const [hotkeysEnabled, setHotkeysEnabled] = useState(() => {
+    return localStorage.getItem('hotkeys_enabled') !== 'false';
+  });
 
   const [targetPlaylistId, setTargetPlaylistId] = useState('');
 
   const handlePlay = () => setIsPlaying(true);
   const handlePause = () => setIsPlaying(false);
 
-  const handleSongEnd = () => handleNext();
+  const togglePlayPause = () => {
+    if (!currentSong) return;
+    setIsPlaying(prev => {
+      const next = !prev;
+      if (next) {
+        youtubeService.playVideo();
+      } else {
+        youtubeService.pauseVideo();
+      }
+      return next;
+    });
+  };
+
+  // Keyboard Hotkeys Listener
+  useEffect(() => {
+    if (!hotkeysEnabled) return;
+
+    const handleGlobalKeyDown = (e) => {
+      // Don't trigger shortcuts if user is typing in an input, textarea, or contentEditable element
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) {
+        return;
+      }
+
+      const code = e.code;
+
+      // Play / Pause
+      if (code === hotkeysConfig.playPause) {
+        e.preventDefault();
+        togglePlayPause();
+      } else if (code === hotkeysConfig.nextTrack) {
+        e.preventDefault();
+        handleNext();
+      } else if (code === hotkeysConfig.prevTrack) {
+        e.preventDefault();
+        handlePrevious();
+      } else if (code === hotkeysConfig.volumeUp) {
+        e.preventDefault();
+        const curVol = youtubeService.player?.getVolume?.() ?? 50;
+        const newVol = Math.min(100, curVol + 5);
+        youtubeService.setVolume(newVol);
+      } else if (code === hotkeysConfig.volumeDown) {
+        e.preventDefault();
+        const curVol = youtubeService.player?.getVolume?.() ?? 50;
+        const newVol = Math.max(0, curVol - 5);
+        youtubeService.setVolume(newVol);
+      } else if (code === hotkeysConfig.mute) {
+        e.preventDefault();
+        if (youtubeService.player) {
+          if (youtubeService.player.isMuted?.()) {
+            youtubeService.player.unMute();
+          } else {
+            youtubeService.player.mute();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+
+    // Listen for global background commands from Rocko Extension
+    const handleExtensionCommand = (e) => {
+      const action = e.detail?.action;
+      if (action === 'toggle-play-pause') {
+        togglePlayPause();
+      } else if (action === 'next-track') {
+        handleNext();
+      } else if (action === 'prev-track') {
+        handlePrevious();
+      }
+    };
+
+    const handleWindowMessage = (e) => {
+      if (e.data && e.data.source === 'rocko-extension') {
+        const action = e.data.action;
+        if (action === 'toggle-play-pause') {
+          togglePlayPause();
+        } else if (action === 'next-track') {
+          handleNext();
+        } else if (action === 'prev-track') {
+          handlePrevious();
+        }
+      }
+    };
+
+    window.addEventListener('rocko-hotkey-command', handleExtensionCommand);
+    window.addEventListener('message', handleWindowMessage);
+
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+      window.removeEventListener('rocko-hotkey-command', handleExtensionCommand);
+      window.removeEventListener('message', handleWindowMessage);
+    };
+  }, [hotkeysEnabled, hotkeysConfig, currentSong, isPlaying, currentPlaylist, currentSongIndex]);
+
+  const playlistRef = useRef(currentPlaylist);
+  const songIndexRef = useRef(currentSongIndex);
+
+  useEffect(() => {
+    playlistRef.current = currentPlaylist;
+  }, [currentPlaylist]);
+
+  useEffect(() => {
+    songIndexRef.current = currentSongIndex;
+  }, [currentSongIndex]);
 
   const handleNext = () => {
-    if (currentPlaylist && currentPlaylist.items && currentPlaylist.items.length > 0) {
-      const nextIndex = (currentSongIndex + 1) % currentPlaylist.items.length;
+    const playlist = playlistRef.current;
+    const currentIndex = songIndexRef.current;
+    
+    if (playlist && playlist.items && playlist.items.length > 0) {
+      const nextIndex = (currentIndex + 1) % playlist.items.length;
+      console.log(`[Auto-Play] Advancing to next track ${nextIndex + 1}/${playlist.items.length}:`, playlist.items[nextIndex].title);
+      songIndexRef.current = nextIndex;
       setCurrentSongIndex(nextIndex);
-      setCurrentSong(currentPlaylist.items[nextIndex]);
+      setCurrentSong(playlist.items[nextIndex]);
       setIsPlaying(true);
+    } else {
+      console.warn('[Auto-Play] No playlist or queue active to advance to.');
     }
+  };
+
+  const handleSongEnd = () => {
+    console.log('[Auto-Play] Current track finished, triggering handleNext...');
+    handleNext();
   };
 
   const handlePrevious = () => {
-    if (currentPlaylist && currentPlaylist.items && currentPlaylist.items.length > 0) {
-      const prevIndex = currentSongIndex === 0 ? currentPlaylist.items.length - 1 : currentSongIndex - 1;
+    const playlist = playlistRef.current;
+    const currentIndex = songIndexRef.current;
+    if (playlist && playlist.items && playlist.items.length > 0) {
+      const prevIndex = currentIndex === 0 ? playlist.items.length - 1 : currentIndex - 1;
+      songIndexRef.current = prevIndex;
       setCurrentSongIndex(prevIndex);
-      setCurrentSong(currentPlaylist.items[prevIndex]);
+      setCurrentSong(playlist.items[prevIndex]);
       setIsPlaying(true);
     }
   };
 
-  const handleSelectSong = (song) => {
-    if (currentPlaylist && currentPlaylist.items) {
-      const songIndex = currentPlaylist.items.findIndex(s => (s.videoId || s.video_id || s.id) === (song.videoId || song.video_id || song.id));
-      if (songIndex !== -1) setCurrentSongIndex(songIndex);
+  const handleSelectSong = (song, playlist, items) => {
+    let targetPlaylist = playlist ? { ...playlist, items: items || playlist.items || [] } : currentPlaylist;
+
+    if (playlist && items && items.length > 0) {
+      targetPlaylist = { ...playlist, items };
+      setCurrentPlaylist(targetPlaylist);
+      playlistRef.current = targetPlaylist;
     }
+
+    if (targetPlaylist && targetPlaylist.items && targetPlaylist.items.length > 0) {
+      const songIndex = targetPlaylist.items.findIndex(s => (s.videoId || s.video_id || s.id) === (song.videoId || song.video_id || song.id));
+      const validIndex = songIndex !== -1 ? songIndex : 0;
+      setCurrentSongIndex(validIndex);
+      songIndexRef.current = validIndex;
+    }
+
     setCurrentSong(song);
     setIsPlaying(true);
   };
 
   const handleSelectPlaylist = (playlist, items) => {
-    setCurrentPlaylist({ ...playlist, items });
+    const updated = { ...playlist, items: items || [] };
+    setCurrentPlaylist(updated);
+    playlistRef.current = updated;
     if (items && items.length > 0) {
       setCurrentSong(items[0]);
       setCurrentSongIndex(0);
+      songIndexRef.current = 0;
       setIsPlaying(true);
     } else {
       setCurrentSong(null);
       setIsPlaying(false);
       setCurrentSongIndex(0);
+      songIndexRef.current = 0;
     }
   };
 
   const handlePlayNow = (song) => {
+    // If not in a playlist, create a single-track queue so the player stays responsive
+    if (!currentPlaylist || !currentPlaylist.items || currentPlaylist.items.length === 0) {
+      const queue = {
+        id: 'queue-' + Date.now(),
+        name: 'Queue',
+        items: [song]
+      };
+      setCurrentPlaylist(queue);
+      playlistRef.current = queue;
+    }
     setCurrentSong(song);
     setIsPlaying(true);
     setCurrentSongIndex(0);
+    songIndexRef.current = 0;
   };
 
   // Play entire album directly in queue
@@ -97,8 +264,10 @@ function App() {
       items: tracks
     };
     setCurrentPlaylist(virtualPlaylist);
+    playlistRef.current = virtualPlaylist;
     setCurrentSong(tracks[0]);
     setCurrentSongIndex(0);
+    songIndexRef.current = 0;
     setIsPlaying(true);
   };
 
@@ -315,7 +484,16 @@ function App() {
 
               {/* User Logged In Place */}
               {user ? (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowHotkeysModal(true)}
+                    className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center"
+                    title="Keyboard Shortcuts / Hotkeys Settings"
+                  >
+                    <Keyboard className="w-5 h-5" />
+                  </button>
+
                   <span className="text-sm font-medium text-gray-700 flex items-center whitespace-nowrap bg-gray-100 px-2.5 py-1.5 rounded-lg">
                     <User className="w-4 h-4 mr-1 text-gray-500" />
                     {user.username}
@@ -329,13 +507,23 @@ function App() {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="flex items-center space-x-1.5 px-3 py-2 bg-white text-black border border-black rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm whitespace-nowrap"
-                >
-                  <LogIn className="w-4 h-4 text-black" />
-                  <span>Login</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowHotkeysModal(true)}
+                    className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center"
+                    title="Keyboard Shortcuts / Hotkeys Settings"
+                  >
+                    <Keyboard className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowAuthModal(true)}
+                    className="flex items-center space-x-1.5 px-3 py-2 bg-white text-black border border-black rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm whitespace-nowrap"
+                  >
+                    <LogIn className="w-4 h-4 text-black" />
+                    <span>Login</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -530,6 +718,16 @@ function App() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onAuth={handleAuth}
+      />
+
+      <HotkeysModal
+        isOpen={showHotkeysModal}
+        onClose={() => setShowHotkeysModal(false)}
+        hotkeys={hotkeysConfig}
+        onSaveHotkeys={(newHotkeys, enabled) => {
+          setHotkeysConfig(newHotkeys);
+          setHotkeysEnabled(enabled);
+        }}
       />
 
       <ApiKeySetup onApiKeySet={() => setShowApiKeySetup(false)} />
