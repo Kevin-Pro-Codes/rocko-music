@@ -232,7 +232,7 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
 
     if (isPlaying) {
       navigator.mediaSession.playbackState = 'playing';
-      silentAudioRef.current?.play()?.catch(() => {});
+      silentAudioRef.current?.play()?.catch(() => { });
     } else {
       navigator.mediaSession.playbackState = 'paused';
       silentAudioRef.current?.pause();
@@ -242,7 +242,7 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       navigator.mediaSession.setActionHandler('play', () => {
         onPlay?.();
         youtubeService.playVideo();
-        silentAudioRef.current?.play()?.catch(() => {});
+        silentAudioRef.current?.play()?.catch(() => { });
       });
       navigator.mediaSession.setActionHandler('pause', () => {
         onPause?.();

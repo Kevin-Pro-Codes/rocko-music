@@ -171,7 +171,7 @@ function App() {
   const handleNext = () => {
     const playlist = playlistRef.current;
     const currentIndex = songIndexRef.current;
-    
+
     if (playlist && playlist.items && playlist.items.length > 0) {
       const nextIndex = (currentIndex + 1) % playlist.items.length;
       console.log(`[Auto-Play] Advancing to next track ${nextIndex + 1}/${playlist.items.length}:`, playlist.items[nextIndex].title);
@@ -337,13 +337,25 @@ function App() {
     setPlaylistRefreshTrigger(prev => prev + 1);
   };
 
+  const [queueSongToRemove, setQueueSongToRemove] = useState(null);
+
   // Direct remove song from Now Playing playlist
-  const handleRemoveFromNowPlaying = async (song, e) => {
+  const handleRequestRemoveFromNowPlaying = (song, e) => {
     e.stopPropagation();
+    const skip = localStorage.getItem('rocko_skip_remove_confirm') === 'true';
+    if (skip) {
+      executeRemoveFromNowPlaying(song);
+      return;
+    }
+    setQueueSongToRemove(song);
+  };
+
+  const executeRemoveFromNowPlaying = async (song) => {
     if (!currentPlaylist || !currentPlaylist.id || typeof currentPlaylist.id === 'string' && currentPlaylist.id.startsWith('album-')) {
       // Temporary/album queue, remove locally
       const updated = currentPlaylist.items.filter(item => (item.id || item.videoId) !== (song.id || song.videoId));
       setCurrentPlaylist(prev => ({ ...prev, items: updated }));
+      setQueueSongToRemove(null);
       return;
     }
 
@@ -355,6 +367,17 @@ function App() {
       setPlaylistRefreshTrigger(prev => prev + 1);
     } catch (err) {
       console.error('Error removing song from current playlist:', err);
+    } finally {
+      setQueueSongToRemove(null);
+    }
+  };
+
+  const handleConfirmRemoveFromQueue = (dontAskAgain) => {
+    if (dontAskAgain) {
+      localStorage.setItem('rocko_skip_remove_confirm', 'true');
+    }
+    if (queueSongToRemove) {
+      executeRemoveFromNowPlaying(queueSongToRemove);
     }
   };
 
@@ -621,7 +644,7 @@ function App() {
                           <div className="flex items-center space-x-2 flex-shrink-0">
                             <button
                               type="button"
-                              onClick={(e) => handleRemoveFromNowPlaying(song, e)}
+                              onClick={(e) => handleRequestRemoveFromNowPlaying(song, e)}
                               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-70 group-hover:opacity-100"
                               title="Remove song from playlist"
                             >
@@ -635,6 +658,62 @@ function App() {
                 )}
               </div>
             </div>
+
+            {/* Now Playing Remove Confirmation Modal */}
+            {queueSongToRemove && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in"
+                onClick={() => setQueueSongToRemove(null)}
+              >
+                <div
+                  className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 space-y-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="p-2 bg-red-100 text-red-600 rounded-full flex-shrink-0">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Remove from playlist?</h3>
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                        Are you sure you want to remove <span className="font-medium text-gray-700">"{queueSongToRemove.title}"</span>?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <label className="flex items-center space-x-2 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        id="dontAskAgainQueueCheckbox"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      />
+                      <span>Don't ask me again</span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-end space-x-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setQueueSongToRemove(null)}
+                      className="px-3.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const checkbox = document.getElementById('dontAskAgainQueueCheckbox');
+                        handleConfirmRemoveFromQueue(checkbox?.checked);
+                      }}
+                      className="px-3.5 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* Logged-out Home Page (No player) */
@@ -736,3 +815,4 @@ function App() {
 }
 
 export default App;
+

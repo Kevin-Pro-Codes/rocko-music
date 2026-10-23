@@ -26,9 +26,17 @@ echo [2/2] Iniciando Cliente Frontend (Vite)...
 start "Rocko Frontend" cmd /c "cd /d "%ROOT_DIR%client" && npm run dev || pause"
 
 echo.
+echo Aguardando inicializacao dos servicos...
+timeout /t 3 /nobreak >nul
+
+echo Abrindo Rocko no seu navegador...
+start "" "http://localhost:5173"
+
+echo.
 echo ===================================================
 echo Backend e Frontend foram iniciados!
 echo URL: http://localhost:5173
 echo ===================================================
 echo.
 timeout /t 5 >nul
+

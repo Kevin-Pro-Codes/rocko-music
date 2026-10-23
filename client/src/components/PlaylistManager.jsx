@@ -98,14 +98,39 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAd
     }
   };
 
-  const handleRemoveSongFromPlaylist = async (playlistId, itemId, e) => {
+  const [songToRemove, setSongToRemove] = useState(null);
+  const [skipRemoveConfirm, setSkipRemoveConfirm] = useState(() => {
+    return localStorage.getItem('rocko_skip_remove_confirm') === 'true';
+  });
+
+  const handleRequestRemoveSong = (playlistId, item, e) => {
     e.stopPropagation();
+    if (skipRemoveConfirm) {
+      executeRemoveSong(playlistId, item.id);
+      return;
+    }
+    setSongToRemove({ playlistId, item });
+  };
+
+  const executeRemoveSong = async (playlistId, itemId) => {
     try {
       await playlists.removeItem(playlistId, itemId);
       const updatedItems = await loadItems(playlistId);
       onPlaylistMutated?.(playlistId, updatedItems);
     } catch (err) {
       console.error('Error removing song from playlist:', err);
+    } finally {
+      setSongToRemove(null);
+    }
+  };
+
+  const handleConfirmRemoveSong = (dontAskAgain) => {
+    if (dontAskAgain) {
+      localStorage.setItem('rocko_skip_remove_confirm', 'true');
+      setSkipRemoveConfirm(true);
+    }
+    if (songToRemove) {
+      executeRemoveSong(songToRemove.playlistId, songToRemove.item.id);
     }
   };
 
@@ -308,7 +333,7 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAd
                             </button>
                             <button
                               type="button"
-                              onClick={(e) => handleRemoveSongFromPlaylist(playlist.id, song.id, e)}
+                              onClick={(e) => handleRequestRemoveSong(playlist.id, song, e)}
                               className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                               title="Remove song from playlist"
                             >
@@ -341,6 +366,62 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAd
           })
         )}
       </div>
+
+      {/* Confirmation Modal with Checkbox */}
+      {songToRemove && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in"
+          onClick={() => setSongToRemove(null)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start space-x-3">
+              <div className="p-2 bg-red-100 text-red-600 rounded-full flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Remove from playlist?</h3>
+                <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                  Are you sure you want to remove <span className="font-medium text-gray-700">"{songToRemove.item.title}"</span>?
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <label className="flex items-center space-x-2 text-xs text-gray-600 cursor-pointer select-none">
+                <input 
+                  type="checkbox" 
+                  id="dontAskAgainCheckbox"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <span>Don't ask me again</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setSongToRemove(null)}
+                className="px-3.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const checkbox = document.getElementById('dontAskAgainCheckbox');
+                  handleConfirmRemoveSong(checkbox?.checked);
+                }}
+                className="px-3.5 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
