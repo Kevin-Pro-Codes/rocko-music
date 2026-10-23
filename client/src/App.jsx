@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Music, LogIn, LogOut, User, MoreVertical, Music2, Disc, Mic, Sparkles, PlayCircle, ShieldCheck, ListMusic, Compass, ArrowRight } from 'lucide-react';
+import { Music, LogIn, LogOut, User, MoreVertical, Music2, Disc, Mic, Sparkles, PlayCircle, ShieldCheck, ListMusic, Compass, ArrowRight, Trash2, Plus } from 'lucide-react';
 import MusicPlayer from './components/MusicPlayer';
 import PlaylistManager from './components/PlaylistManager';
 import SearchBar from './components/SearchBar';
@@ -34,6 +34,8 @@ function App() {
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
+
+  const [targetPlaylistId, setTargetPlaylistId] = useState('');
 
   const handlePlay = () => setIsPlaying(true);
   const handlePause = () => setIsPlaying(false);
@@ -108,6 +110,7 @@ function App() {
     setSelectedSongForPlaylist(song);
     setSelectedBatchSongs([]);
     setDefaultPlaylistTitle('');
+    setTargetPlaylistId('');
     setShowAddToPlaylistModal(true);
   };
 
@@ -119,7 +122,71 @@ function App() {
     setSelectedSongForPlaylist(null);
     setSelectedBatchSongs(songs);
     setDefaultPlaylistTitle(collectionName);
+    setTargetPlaylistId('');
     setShowAddToPlaylistModal(true);
+  };
+
+  // Add song to a specific playlist (from playlist + button)
+  const handleAddSongToSpecificPlaylist = (playlist) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    // Prompts search or preselects playlist in modal if song already playing
+    if (currentSong) {
+      setSelectedSongForPlaylist(currentSong);
+      setSelectedBatchSongs([]);
+      setDefaultPlaylistTitle('');
+      setTargetPlaylistId(playlist.id);
+      setShowAddToPlaylistModal(true);
+    } else {
+      setTargetPlaylistId(playlist.id);
+      setSelectedSongForPlaylist(null);
+      setSelectedBatchSongs([]);
+      setDefaultPlaylistTitle('');
+      setShowAddToPlaylistModal(true);
+    }
+  };
+
+  // Callback when a playlist is renamed or an item is removed
+  const handlePlaylistMutated = (mutatedPlaylistId, updatedItems) => {
+    if (currentPlaylist && (currentPlaylist.id === mutatedPlaylistId || !mutatedPlaylistId)) {
+      if (updatedItems) {
+        setCurrentPlaylist(prev => ({ ...prev, items: updatedItems }));
+        // If the removed song was the active song, play the next available
+        if (currentSong && !updatedItems.some(item => item.id === currentSong.id)) {
+          if (updatedItems.length > 0) {
+            setCurrentSong(updatedItems[0]);
+            setCurrentSongIndex(0);
+          } else {
+            setCurrentSong(null);
+            setIsPlaying(false);
+          }
+        }
+      }
+    }
+    setPlaylistRefreshTrigger(prev => prev + 1);
+  };
+
+  // Direct remove song from Now Playing playlist
+  const handleRemoveFromNowPlaying = async (song, e) => {
+    e.stopPropagation();
+    if (!currentPlaylist || !currentPlaylist.id || typeof currentPlaylist.id === 'string' && currentPlaylist.id.startsWith('album-')) {
+      // Temporary/album queue, remove locally
+      const updated = currentPlaylist.items.filter(item => (item.id || item.videoId) !== (song.id || song.videoId));
+      setCurrentPlaylist(prev => ({ ...prev, items: updated }));
+      return;
+    }
+
+    try {
+      const { playlists } = await import('./services/api');
+      await playlists.removeItem(currentPlaylist.id, song.id);
+      const res = await playlists.getItems(currentPlaylist.id);
+      setCurrentPlaylist(prev => ({ ...prev, items: res.data }));
+      setPlaylistRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      console.error('Error removing song from current playlist:', err);
+    }
   };
 
   const handleLogout = () => {
@@ -154,7 +221,7 @@ function App() {
             <div className="flex items-center space-x-3">
               {user && (
                 <>
-                  <div className="w-72 sm:w-80 md:w-96">
+                  <div className="w-80 sm:w-96 md:w-[480px] lg:w-[540px]">
                     <SearchBar
                       onAddToPlaylist={handleAddToPlaylist}
                       onPlayNow={handlePlayNow}
@@ -171,9 +238,8 @@ function App() {
                     <button
                       type="button"
                       onClick={() => setShowModeMenu(prev => !prev)}
-                      className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
-                        showModeMenu ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
+                      className={`p-2 rounded-lg transition-colors flex items-center justify-center ${showModeMenu ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+                        }`}
                       title="Filter mode: Song, Album, Artist"
                     >
                       <MoreVertical className="w-5 h-5" />
@@ -195,9 +261,8 @@ function App() {
                               setSearchMode('all');
                               setShowModeMenu(false);
                             }}
-                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                              searchMode === 'all' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${searchMode === 'all' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                              }`}
                           >
                             <Compass className="w-4 h-4 mr-2" />
                             <span>All</span>
@@ -209,9 +274,8 @@ function App() {
                               setSearchMode('songs');
                               setShowModeMenu(false);
                             }}
-                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                              searchMode === 'songs' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${searchMode === 'songs' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                              }`}
                           >
                             <Music2 className="w-4 h-4 mr-2" />
                             <span>Song</span>
@@ -223,9 +287,8 @@ function App() {
                               setSearchMode('albums');
                               setShowModeMenu(false);
                             }}
-                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                              searchMode === 'albums' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${searchMode === 'albums' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                              }`}
                           >
                             <Disc className="w-4 h-4 mr-2" />
                             <span>Album</span>
@@ -237,9 +300,8 @@ function App() {
                               setSearchMode('artist');
                               setShowModeMenu(false);
                             }}
-                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
-                              searchMode === 'artist' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${searchMode === 'artist' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                              }`}
                           >
                             <Mic className="w-4 h-4 mr-2" />
                             <span>Artist</span>
@@ -280,10 +342,10 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[1050px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {user ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+            <div className="lg:col-span-7 xl:col-span-7">
               <PlaylistManager
                 key={`pm-${playlistRefreshTrigger}`}
                 onSelectPlaylist={handleSelectPlaylist}
@@ -291,12 +353,14 @@ function App() {
                 onMergePlaylist={(sourcePlaylist, items) => {
                   handleAddBatchToPlaylist(`${sourcePlaylist.name} (Copy)`, items);
                 }}
+                onAddSongToPlaylist={handleAddSongToSpecificPlaylist}
+                onPlaylistMutated={handlePlaylistMutated}
                 currentPlaylistId={currentPlaylist?.id}
                 user={user}
               />
             </div>
 
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-5 xl:col-span-5 sticky top-6">
               <div className="space-y-6">
                 <MusicPlayer
                   currentSong={currentSong}
@@ -314,19 +378,31 @@ function App() {
                       <h3 className="text-lg font-semibold text-gray-800 truncate mr-3" title={currentPlaylist.name}>
                         Now Playing: {currentPlaylist.name}
                       </h3>
-                      <button
-                        onClick={() => handleAddBatchToPlaylist(currentPlaylist.name, currentPlaylist.items)}
-                        className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
-                        title="Save or merge all these songs into another playlist"
-                      >
-                        <span>Save as Playlist</span>
-                      </button>
+                      <div className="flex items-center space-x-2 flex-shrink-0">
+                        {currentPlaylist.id && typeof currentPlaylist.id === 'number' && (
+                          <button
+                            onClick={() => handleAddSongToSpecificPlaylist(currentPlaylist)}
+                            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
+                            title="Add song to this playlist"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Song</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleAddBatchToPlaylist(currentPlaylist.name, currentPlaylist.items)}
+                          className="flex items-center space-x-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg text-xs font-medium transition-colors"
+                          title="Save or merge all these songs into another playlist"
+                        >
+                          <span>Save as Playlist</span>
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {currentPlaylist.items.map((song, index) => (
                         <div
                           key={song.id || `${song.videoId}-${index}`}
-                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)
+                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer group transition-colors ${currentSong?.id === song.id || (currentSong?.videoId && currentSong.videoId === song.videoId)
                             ? 'bg-blue-50 border border-blue-200'
                             : 'hover:bg-gray-50'
                             }`}
@@ -352,6 +428,17 @@ function App() {
                                 {song.title}
                               </p>
                             </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoveFromNowPlaying(song, e)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-70 group-hover:opacity-100"
+                              title="Remove song from playlist"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -424,14 +511,16 @@ function App() {
         song={selectedSongForPlaylist}
         songs={selectedBatchSongs}
         defaultPlaylistName={defaultPlaylistTitle}
+        initialSelectedPlaylistId={targetPlaylistId}
         isOpen={showAddToPlaylistModal}
         onClose={() => {
           setShowAddToPlaylistModal(false);
           setSelectedSongForPlaylist(null);
           setSelectedBatchSongs([]);
           setDefaultPlaylistTitle('');
+          setTargetPlaylistId('');
         }}
-        onPlaylistUpdated={() => {
+        onPlaylistUpdated={(playlistId) => {
           setPlaylistRefreshTrigger(prev => prev + 1);
         }}
         user={user}

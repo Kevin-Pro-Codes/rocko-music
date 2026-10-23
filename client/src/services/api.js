@@ -18,6 +18,7 @@ export const auth = {
 export const playlists = {
   getAll: () => api.get('/playlists'),
   create: (name) => api.post('/playlists', { name }),
+  update: (id, name) => api.put(`/playlists/${id}`, { name }),
   remove: (id) => api.delete(`/playlists/${id}`),
   getItems: (id) => api.get(`/playlists/${id}/items`),
   addItem: (id, item) => api.post(`/playlists/${id}/items`, item),

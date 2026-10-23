@@ -93,6 +93,23 @@ app.post('/api/playlists', authenticate, (req, res) => {
   }
 });
 
+// Update playlist name
+app.put('/api/playlists/:id', authenticate, (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Playlist name required' });
+  try {
+    const playlist = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+
+    db.prepare('UPDATE playlists SET name = ? WHERE id = ? AND user_id = ?').run(name.trim(), req.params.id, req.user.id);
+    const updated = db.prepare('SELECT * FROM playlists WHERE id = ?').get(req.params.id);
+    res.json(updated);
+  } catch (err) {
+    console.error('Update playlist error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Delete playlist
 app.delete('/api/playlists/:id', authenticate, (req, res) => {
   try {

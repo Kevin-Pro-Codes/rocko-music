@@ -256,7 +256,7 @@ const SearchBar = ({
       {showResults && (
         <div
           onScroll={handleDropdownScroll}
-          className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto"
+          className="absolute z-10 right-0 w-[480px] sm:w-[560px] md:w-[620px] max-w-[90vw] mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[28rem] overflow-y-auto"
         >
           {isSearching ? (
             <div className="py-12 flex flex-col items-center justify-center space-y-2.5">
@@ -286,10 +286,10 @@ const SearchBar = ({
                         <span className="inline-block px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold rounded mb-1">
                           FULL ALBUM
                         </span>
-                        <h4 className="font-medium text-gray-800 text-sm truncate" title={album.title}>
+                        <h4 className="font-medium text-gray-800 text-sm leading-snug line-clamp-2" title={album.title}>
                           {album.title}
                         </h4>
-                        <p className="text-xs text-gray-600 truncate">{album.artist}</p>
+                        <p className="text-xs text-gray-600 line-clamp-1 mt-0.5">{album.artist}</p>
                       </div>
 
                       <div className="flex items-center space-x-1.5 flex-shrink-0">
@@ -337,16 +337,16 @@ const SearchBar = ({
                         loading="lazy"
                         className="w-14 h-14 rounded object-cover flex-shrink-0 border border-gray-100"
                       />
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 pr-2">
                         {isAlbum && (
                           <span className="inline-block px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold rounded mb-0.5">
                             FULL ALBUM
                           </span>
                         )}
-                        <h4 className="font-medium text-gray-800 text-sm truncate" title={item.title}>
+                        <h4 className="font-medium text-gray-800 text-sm leading-snug line-clamp-2" title={item.title}>
                           {item.title}
                         </h4>
-                        <p className="text-xs text-gray-600 truncate">
+                        <p className="text-xs text-gray-600 line-clamp-1 mt-0.5">
                           {item.artist}
                         </p>
                       </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Check } from 'lucide-react';
 import { playlists } from '../services/api';
 
-const AddToPlaylistModal = ({ song, songs, defaultPlaylistName, isOpen, onClose, onPlaylistUpdated, user }) => {
+const AddToPlaylistModal = ({ song, songs, defaultPlaylistName, initialSelectedPlaylistId, isOpen, onClose, onPlaylistUpdated, user }) => {
   const [playlistsList, setPlaylistsList] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -14,16 +14,21 @@ const AddToPlaylistModal = ({ song, songs, defaultPlaylistName, isOpen, onClose,
   useEffect(() => {
     if (isOpen && user) {
       loadPlaylists();
-      setSelectedPlaylist('');
-      if (defaultPlaylistName) {
+      if (initialSelectedPlaylistId) {
+        setSelectedPlaylist(initialSelectedPlaylistId);
+        setShowCreateForm(false);
+        setNewPlaylistName('');
+      } else if (defaultPlaylistName) {
+        setSelectedPlaylist('');
         setNewPlaylistName(defaultPlaylistName);
         setShowCreateForm(true);
       } else {
+        setSelectedPlaylist('');
         setNewPlaylistName('');
         setShowCreateForm(false);
       }
     }
-  }, [isOpen, user, defaultPlaylistName]);
+  }, [isOpen, user, defaultPlaylistName, initialSelectedPlaylistId]);
 
   const loadPlaylists = async () => {
     try {

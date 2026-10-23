@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Play, Trash2, Edit2, Save, X, Music, Clock, ChevronDown, ChevronUp, FolderPlus } from 'lucide-react';
+import { Plus, Play, Trash2, Edit2, Check, X, Music, Clock, ChevronDown, ChevronUp, FolderPlus } from 'lucide-react';
 import { playlists } from '../services/api';
 
-const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, currentPlaylistId, user }) => {
+const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, onAddSongToPlaylist, currentPlaylistId, user, onPlaylistMutated }) => {
   const [playlistsList, setPlaylistsList] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [editingPlaylist, setEditingPlaylist] = useState(null);
+  const [editingPlaylistId, setEditingPlaylistId] = useState(null);
   const [editName, setEditName] = useState('');
   const [expandedPlaylists, setExpandedPlaylists] = useState(new Set());
   const [itemsMap, setItemsMap] = useState({});
@@ -41,8 +41,10 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
     try {
       const res = await playlists.getItems(playlistId);
       setItemsMap(prev => ({ ...prev, [playlistId]: res.data }));
+      return res.data;
     } catch (err) {
       console.error('Error loading items:', err);
+      return [];
     }
   };
 
@@ -53,8 +55,35 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
       setNewPlaylistName('');
       setShowCreateForm(false);
       loadPlaylists();
+      onPlaylistMutated?.();
     } catch (err) {
       console.error('Error creating playlist:', err);
+    }
+  };
+
+  const startEditing = (playlist, e) => {
+    e.stopPropagation();
+    setEditingPlaylistId(playlist.id);
+    setEditName(playlist.name);
+  };
+
+  const cancelEditing = (e) => {
+    e?.stopPropagation();
+    setEditingPlaylistId(null);
+    setEditName('');
+  };
+
+  const handleSaveRename = async (playlistId, e) => {
+    e?.stopPropagation();
+    if (!editName.trim()) return;
+    try {
+      await playlists.update(playlistId, editName.trim());
+      setEditingPlaylistId(null);
+      await loadPlaylists();
+      onPlaylistMutated?.();
+    } catch (err) {
+      console.error('Error renaming playlist:', err);
+      alert('Failed to rename playlist');
     }
   };
 
@@ -63,8 +92,20 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
     try {
       await playlists.remove(playlistId);
       loadPlaylists();
+      onPlaylistMutated?.();
     } catch (err) {
       console.error('Error deleting playlist:', err);
+    }
+  };
+
+  const handleRemoveSongFromPlaylist = async (playlistId, itemId, e) => {
+    e.stopPropagation();
+    try {
+      await playlists.removeItem(playlistId, itemId);
+      const updatedItems = await loadItems(playlistId);
+      onPlaylistMutated?.(playlistId, updatedItems);
+    } catch (err) {
+      console.error('Error removing song from playlist:', err);
     }
   };
 
@@ -102,13 +143,17 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
             placeholder="Playlist name"
             value={newPlaylistName}
             onChange={(e) => setNewPlaylistName(e.target.value)}
-            className="w-full mb-3 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreatePlaylist();
+              if (e.key === 'Escape') setShowCreateForm(false);
+            }}
+            className="w-full mb-3 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             autoFocus
           />
           <div className="flex space-x-2">
             <button
               onClick={handleCreatePlaylist}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
             >
               Create
             </button>
@@ -117,7 +162,7 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
                 setShowCreateForm(false);
                 setNewPlaylistName('');
               }}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
             >
               Cancel
             </button>
@@ -135,34 +180,78 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
         ) : (
           playlistsList.map((playlist) => {
             const items = itemsMap[playlist.id] || [];
+            const isEditingThis = editingPlaylistId === playlist.id;
+
             return (
               <div
                 key={playlist.id}
-                className={`border rounded-lg p-4 transition-all cursor-pointer ${currentPlaylistId === playlist.id
-                    ? 'border-blue-500 bg-blue-50'
+                className={`border rounded-lg p-4 transition-all ${
+                  currentPlaylistId === playlist.id
+                    ? 'border-blue-500 bg-blue-50/40'
                     : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
-                    className="flex-1"
-                    onClick={() => handleSelectPlaylist(playlist)}
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => !isEditingThis && handleSelectPlaylist(playlist)}
                   >
-                    <h3 className="font-semibold text-gray-800 mb-1">
-                      {playlist.name}
-                    </h3>
-                    <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                    {isEditingThis ? (
+                      <div className="flex items-center space-x-2 mr-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveRename(playlist.id, e);
+                            if (e.key === 'Escape') cancelEditing(e);
+                          }}
+                          className="px-2 py-1 text-sm border border-blue-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                          autoFocus
+                        />
+                        <button
+                          onClick={(e) => handleSaveRename(playlist.id, e)}
+                          className="p-1 text-green-600 hover:bg-green-100 rounded"
+                          title="Save Name"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="p-1 text-gray-500 hover:bg-gray-200 rounded"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center group">
+                        <h3 className="font-semibold text-gray-800 text-base truncate" title={playlist.name}>
+                          {playlist.name}
+                        </h3>
+                        <button
+                          onClick={(e) => startEditing(playlist, e)}
+                          className="ml-2 p-1 text-gray-400 hover:text-blue-600 rounded transition-colors opacity-70 hover:opacity-100"
+                          title="Edit playlist name"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-4 mt-1.5 text-xs text-gray-500">
                       <span className="flex items-center text-gray-700">
-                        <Music className="w-3 h-3 mr-1" />
-                        {items.length} songs
+                        <Music className="w-3 h-3 mr-1 text-gray-400" />
+                        {items.length} {items.length === 1 ? 'song' : 'songs'}
                       </span>
-                      <span className="flex items-center text-gray-700">
-                        <Clock className="w-3 h-3 mr-1" />
+                      <span className="flex items-center text-gray-500">
+                        <Clock className="w-3 h-3 mr-1 text-gray-400" />
                         {formatDate(playlist.created_at)}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-1 ml-2">
+
+                  <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
                     {items.length > 0 && (
                       <button
                         onClick={(e) => {
@@ -170,11 +259,12 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
                           onMergePlaylist?.(playlist, items);
                         }}
                         className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                        title="Add/Merge entire playlist into another playlist"
+                        title="Copy / merge entire playlist"
                       >
                         <FolderPlus className="w-4 h-4" />
                       </button>
                     )}
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -189,12 +279,12 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
                 </div>
 
                 {items.length > 0 && (
-                  <div className="border-t pt-3 mt-3">
-                    <div className="space-y-2">
+                  <div className="border-t border-gray-100 pt-2.5 mt-2.5">
+                    <div className="space-y-1.5">
                       {items.slice(0, expandedPlaylists.has(playlist.id) ? items.length : 3).map((song) => (
                         <div
                           key={song.id}
-                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer group"
+                          className="flex items-center justify-between p-2 hover:bg-white rounded-md cursor-pointer group transition-colors border border-transparent hover:border-gray-200"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSelectSong(song);
@@ -208,21 +298,32 @@ const PlaylistManager = ({ onSelectPlaylist, onSelectSong, onMergePlaylist, curr
                               {song.title}
                             </p>
                           </div>
-                          <Play className="w-4 h-4 text-blue-600 flex-shrink-0 opacity-80 group-hover:opacity-100" />
+                          <div className="flex items-center space-x-1 flex-shrink-0">
+                            <Play className="w-4 h-4 text-blue-600 opacity-70 group-hover:opacity-100" />
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoveSongFromPlaylist(playlist.id, song.id, e)}
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Remove song from playlist"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ))}
+
                       {items.length > 3 && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleExpand(playlist.id);
                           }}
-                          className="text-xs text-blue-600 hover:text-blue-700 font-medium text-center w-full py-2 mt-1 transition-colors flex items-center justify-center rounded hover:bg-blue-50"
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium text-center w-full py-1.5 mt-1 transition-colors flex items-center justify-center rounded hover:bg-blue-50"
                         >
                           {expandedPlaylists.has(playlist.id) ? (
-                            <>Show less <ChevronUp className="w-4 h-4 ml-1" /></>
+                            <>Show less <ChevronUp className="w-3.5 h-3.5 ml-1" /></>
                           ) : (
-                            <>Show {items.length - 3} more songs <ChevronDown className="w-4 h-4 ml-1" /></>
+                            <>Show {items.length - 3} more songs <ChevronDown className="w-3.5 h-3.5 ml-1" /></>
                           )}
                         </button>
                       )}
