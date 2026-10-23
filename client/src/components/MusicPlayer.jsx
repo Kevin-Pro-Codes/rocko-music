@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import youtubeService from '../services/youtube';
+import { searchApi } from '../services/api';
 
 const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevious, onSongEnd }) => {
   const [volume, setVolume] = useState(50);
@@ -66,8 +67,8 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
     };
   }, []);
 
-  // Active playback ticker: advances currentTime every 250ms when song is playing,
-  // prioritizing actual youtube player time whenever available, and estimating smoothly if iframe lags
+  // Continuous active playback ticker: advances currentTime every 250ms when song is playing,
+  // prioritizing actual youtube player time and duration whenever available
   useEffect(() => {
     if (!isPlaying) return;
 
@@ -76,7 +77,7 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       const ytDur = youtubeService.getDuration();
 
       if (ytDur > 0) {
-        setDuration(ytDur);
+        setDuration(prev => (prev !== ytDur ? ytDur : prev));
       }
 
       if (ytTime > 0) {
@@ -93,6 +94,54 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
     return () => clearInterval(interval);
   }, [isPlaying, duration]);
 
+  // Robust duration poller for the currently active song
+  useEffect(() => {
+    if (!currentSong) return;
+
+    const videoId = currentSong.videoId || currentSong.video_id;
+    if (!videoId) return;
+
+    // 1. If song already has duration, use it immediately
+    if (currentSong.duration && Number(currentSong.duration) > 0) {
+      setDuration(Number(currentSong.duration));
+      return;
+    }
+
+    // 2. Poll YouTube iframe player for duration every 400ms for up to 6 seconds
+    let attempts = 0;
+    let resolved = false;
+    const durInterval = setInterval(() => {
+      attempts++;
+      const ytDur = youtubeService.getDuration();
+      if (ytDur > 0) {
+        setDuration(ytDur);
+        resolved = true;
+        clearInterval(durInterval);
+      } else if (attempts >= 15) {
+        clearInterval(durInterval);
+      }
+    }, 400);
+
+    // 3. In parallel, fetch video details from backend scraper if duration is still missing
+    const fetchTimer = setTimeout(async () => {
+      if (!resolved) {
+        try {
+          const res = await searchApi.getVideoDetails(videoId);
+          if (res.data?.duration && res.data.duration > 0) {
+            setDuration(res.data.duration);
+          }
+        } catch {
+          // ignore error
+        }
+      }
+    }, 700);
+
+    return () => {
+      clearInterval(durInterval);
+      clearTimeout(fetchTimer);
+    };
+  }, [currentSong]);
+
   useEffect(() => {
     if (!currentSong) return;
 
@@ -104,14 +153,18 @@ const MusicPlayer = ({ currentSong, isPlaying, onPlay, onPause, onNext, onPrevio
       loadedVideoIdRef.current = videoId;
       youtubeService.playVideo(videoId);
       setCurrentTime(0);
-      setDuration(currentSong.duration || 0);
+      if (currentSong.duration && currentSong.duration > 0) {
+        setDuration(Number(currentSong.duration));
+      }
       onPlay?.();
-      // Ensure player state is active
+      // Ensure player state is active and fetch duration as soon as video loads
       setTimeout(() => {
         if (youtubeService.player && typeof youtubeService.player.playVideo === 'function') {
           youtubeService.player.playVideo();
         }
-      }, 100);
+        const initialDur = youtubeService.getDuration();
+        if (initialDur > 0) setDuration(initialDur);
+      }, 300);
     } else if (isPlaying) {
       youtubeService.playVideo();
     }

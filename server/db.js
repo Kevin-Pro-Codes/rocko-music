@@ -35,6 +35,7 @@ db.exec(`
     video_id TEXT NOT NULL,
     title TEXT NOT NULL,
     thumbnail TEXT,
+    duration INTEGER DEFAULT 0,
     position INTEGER NOT NULL,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -48,6 +49,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id);
   CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist_id ON playlist_items(playlist_id);
 `);
+
+// Migration: add duration column if it does not exist yet
+try {
+  db.exec(`ALTER TABLE playlist_items ADD COLUMN duration INTEGER DEFAULT 0`);
+} catch (e) {
+  // column already exists
+}
 
 // Inject and persist YouTube API credential if not already present
 const insertSetting = db.prepare(`

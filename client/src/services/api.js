@@ -33,6 +33,7 @@ export const config = {
 export const searchApi = {
   proxySearch: (query, type) => api.get('/search/proxy', { params: { q: query, type } }),
   getPlaylistTracks: (playlistId) => api.get('/search/playlist-tracks', { params: { playlistId } }),
+  getVideoDetails: (videoId) => api.get('/search/video-details', { params: { videoId } }),
 };
 
 export default api;

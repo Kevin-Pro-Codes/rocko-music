@@ -53,7 +53,8 @@ const AddToPlaylistModal = ({ song, songs, defaultPlaylistName, isOpen, onClose,
           await playlists.addItem(playlistId, {
             video_id: item.videoId || item.video_id || item.id,
             title: item.title,
-            thumbnail: item.thumbnail
+            thumbnail: item.thumbnail,
+            duration: item.duration || 0
           });
         } else {
           try {
@@ -65,7 +66,8 @@ const AddToPlaylistModal = ({ song, songs, defaultPlaylistName, isOpen, onClose,
                 await playlists.addItem(playlistId, {
                   video_id: item.videoId || item.video_id || item.id,
                   title: item.title,
-                  thumbnail: item.thumbnail
+                  thumbnail: item.thumbnail,
+                  duration: item.duration || 0
                 });
               }
             } else {

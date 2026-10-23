@@ -133,15 +133,16 @@ app.post('/api/playlists/:id/batch-items', authenticate, (req, res) => {
     let startPos = posRow.count;
 
     const insert = db.prepare(`
-      INSERT INTO playlist_items (playlist_id, video_id, title, thumbnail, position)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO playlist_items (playlist_id, video_id, title, thumbnail, duration, position)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     const insertMany = db.transaction((songs) => {
       for (const song of songs) {
         const vid = song.videoId || song.video_id;
         if (vid && song.title) {
-          insert.run(req.params.id, vid, song.title, song.thumbnail || null, startPos++);
+          const dur = Number(song.duration) || 0;
+          insert.run(req.params.id, vid, song.title, song.thumbnail || null, dur, startPos++);
         }
       }
     });
@@ -157,7 +158,7 @@ app.post('/api/playlists/:id/batch-items', authenticate, (req, res) => {
 
 // Add item to playlist
 app.post('/api/playlists/:id/items', authenticate, (req, res) => {
-  const { video_id, title, thumbnail } = req.body;
+  const { video_id, title, thumbnail, duration } = req.body;
   if (!video_id || !title) return res.status(400).json({ error: 'video_id and title required' });
   try {
     const playlist = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
@@ -165,12 +166,13 @@ app.post('/api/playlists/:id/items', authenticate, (req, res) => {
 
     const posRow = db.prepare('SELECT COUNT(*) as count FROM playlist_items WHERE playlist_id = ?').get(req.params.id);
     const position = posRow.count;
+    const dur = Number(duration) || 0;
 
     const insert = db.prepare(`
-      INSERT INTO playlist_items (playlist_id, video_id, title, thumbnail, position)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO playlist_items (playlist_id, video_id, title, thumbnail, duration, position)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    const info = insert.run(req.params.id, video_id, title, thumbnail || null, position);
+    const info = insert.run(req.params.id, video_id, title, thumbnail || null, dur, position);
     const item = db.prepare('SELECT * FROM playlist_items WHERE id = ?').get(info.lastInsertRowid);
     res.json(item);
   } catch (err) {
@@ -265,6 +267,13 @@ app.get('/api/search/proxy', async (req, res) => {
           const title = v.title?.runs?.[0]?.text || '';
           const artist = v.ownerText?.runs?.[0]?.text || v.channelTitle || 'Artist';
           const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+          const durationText = v.lengthText?.simpleText || '';
+          let durationSeconds = 0;
+          if (durationText) {
+            const parts = durationText.split(':').map(Number);
+            if (parts.length === 2) durationSeconds = parts[0] * 60 + parts[1];
+            else if (parts.length === 3) durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+          }
 
           if (videoId && title && !results.some(r => r.videoId === videoId)) {
             results.push({
@@ -272,6 +281,8 @@ app.get('/api/search/proxy', async (req, res) => {
               title,
               artist,
               thumbnail,
+              duration: durationSeconds,
+              durationText,
               channelTitle: artist
             });
           }
@@ -374,6 +385,13 @@ app.get('/api/search/proxy', async (req, res) => {
                 const title = v.title?.runs?.[0]?.text || '';
                 const artist = v.ownerText?.runs?.[0]?.text || v.channelTitle || 'Artist';
                 const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                const durationText = v.lengthText?.simpleText || '';
+                let durationSeconds = 0;
+                if (durationText) {
+                  const parts = durationText.split(':').map(Number);
+                  if (parts.length === 2) durationSeconds = parts[0] * 60 + parts[1];
+                  else if (parts.length === 3) durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                }
 
                 if (videoId && title && !results.some(r => r.videoId === videoId)) {
                   results.push({
@@ -381,6 +399,8 @@ app.get('/api/search/proxy', async (req, res) => {
                     title,
                     artist,
                     thumbnail,
+                    duration: durationSeconds,
+                    durationText,
                     channelTitle: artist
                   });
                 }
@@ -433,11 +453,21 @@ app.get('/api/search/playlist-tracks', async (req, res) => {
     for (const item of items) {
       const v = item.playlistVideoRenderer;
       if (v && v.videoId && v.title?.runs?.[0]?.text) {
+        const durationText = v.lengthText?.simpleText || '';
+        let durationSeconds = 0;
+        if (durationText) {
+          const parts = durationText.split(':').map(Number);
+          if (parts.length === 2) durationSeconds = parts[0] * 60 + parts[1];
+          else if (parts.length === 3) durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+
         tracks.push({
           videoId: v.videoId,
           title: v.title.runs[0].text,
           artist: v.shortBylineText?.runs?.[0]?.text || 'Artist',
-          thumbnail: v.thumbnail?.thumbnails?.[0]?.url || `https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`
+          thumbnail: v.thumbnail?.thumbnails?.[0]?.url || `https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`,
+          duration: durationSeconds,
+          durationText: durationText
         });
       }
     }
@@ -446,6 +476,67 @@ app.get('/api/search/playlist-tracks', async (req, res) => {
   } catch (err) {
     console.error('Proxy playlist tracks error:', err);
     res.status(500).json({ error: 'Failed to fetch playlist tracks' });
+  }
+});
+
+// Fetch specific video duration and details without quota
+app.get('/api/search/video-details', async (req, res) => {
+  const { videoId } = req.query;
+  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+
+  try {
+    const url = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+
+    const html = await response.text();
+    let durationSeconds = 0;
+    
+    // 1. Try approxDurationMs
+    const approxMatch = html.match(/"approxDurationMs":"(\d+)"/);
+    if (approxMatch && approxMatch[1]) {
+      durationSeconds = Math.round(parseInt(approxMatch[1], 10) / 1000);
+    }
+
+    // 2. Fallback: lengthSeconds
+    if (!durationSeconds) {
+      const lenMatch = html.match(/"lengthSeconds":"(\d+)"/);
+      if (lenMatch && lenMatch[1]) {
+        durationSeconds = parseInt(lenMatch[1], 10);
+      }
+    }
+
+    // 3. Fallback: schema.org duration e.g. PT3M45S
+    if (!durationSeconds) {
+      const isoMatch = html.match(/itemprop="duration"\s+content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/);
+      if (isoMatch) {
+        const hours = parseInt(isoMatch[1] || 0, 10);
+        const mins = parseInt(isoMatch[2] || 0, 10);
+        const secs = parseInt(isoMatch[3] || 0, 10);
+        durationSeconds = hours * 3600 + mins * 60 + secs;
+      }
+    }
+
+    // Persist duration in database if this song is in playlist_items
+    if (durationSeconds > 0) {
+      try {
+        db.prepare('UPDATE playlist_items SET duration = ? WHERE video_id = ? AND (duration IS NULL OR duration = 0)').run(durationSeconds, videoId);
+      } catch (dbErr) {
+        // non-fatal
+      }
+    }
+
+    res.json({
+      videoId,
+      duration: durationSeconds
+    });
+  } catch (err) {
+    console.error('Video details error:', err);
+    res.status(500).json({ error: 'Failed to fetch video details' });
   }
 });
 
