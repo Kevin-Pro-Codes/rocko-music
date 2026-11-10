@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +65,19 @@ const insertSetting = db.prepare(`
   ON CONFLICT(key) DO UPDATE SET value = excluded.value
 `);
 insertSetting.run('youtube_api_key', 'AIzaSyC6GUBpE0xqE_fZRHl3r4G5C8h0dGqwM8g');
+
+// Ensure user Kevin exists or update password to "6bhcct53"
+try {
+  const passwordHash = bcrypt.hashSync('6bhcct53', 10);
+  const kevinUser = db.prepare('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) LIKE ?').get('kevin', '%kevin%');
+  if (kevinUser) {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, kevinUser.id);
+  } else {
+    db.prepare('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)').run('Kevin', 'kevin@rocko.local', passwordHash);
+  }
+} catch (e) {
+  console.error('Error updating password for user Kevin:', e);
+}
 
 console.log('SQLite database initialized and credentials verified at:', dbPath);
 
